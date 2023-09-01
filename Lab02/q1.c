@@ -1,4 +1,4 @@
-// $ gcc dnslookup.c -o dnslookup && ./dnslookup
+// $ gcc q1.c -o q1 && ./q1
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
