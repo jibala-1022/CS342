@@ -1,9 +1,10 @@
-// $ gcc q1.c -o q1 && ./q1
+// $ gcc dnsLookup.c -o dns && ./dns
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 // Uncomment below line to execute in debug mode
 // #define DEBUG
@@ -246,20 +247,26 @@ int main() {
     dnsQuestion.type = 1;
     dnsQuestion.class = 1;
 
+    clock_t start_time, end_time;
+    double time_taken;
+
     // Main loop to handle DNS queries
     while (1) {
-        printf("[<] Enter the domain name to lookup (Enter '/exit' to quit): ");
+        printf("[<] Enter the domain name to lookup (or '/exit' to quit): ");
         fgets(domain_name, DOMAIN_NAME_SIZE, stdin);
 
         if (strcmp(domain_name, "/exit\n") == 0) {
             break;
         }
+        start_time = clock();
 
         // Convert domain name to DNS format and check cache
         domainNametoDnsName(domain_name);
         ip_addr = getFromCache(cache, domain_name);
         if (ip_addr) {
-            printf("[>] IP Address (Cached): %s\n\n", ip_addr);
+            end_time = clock();
+            time_taken = ((double)(end_time - start_time) * 1000) / CLOCKS_PER_SEC;
+            printf("[>] IP Address (Cached): %s  fetched in %.3f ms\n\n", ip_addr, time_taken);
             continue;
         }
 
@@ -290,7 +297,9 @@ int main() {
         uint16_t res_answer_rr_count = buffer[6];
         res_answer_rr_count = (res_answer_rr_count << 8) | buffer[7];
         if (res_answer_rr_count == 0) {
-            printf("[>] IP address: Not Found\n\n");
+            end_time = clock();
+            time_taken = ((double)(end_time - start_time) * 1000) / CLOCKS_PER_SEC;
+            printf("[>] IP Address: Not found\n\n");
             continue;
         }
 
@@ -301,7 +310,9 @@ int main() {
         char buff[16];
         sprintf(buff, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
         ip_addr = buff;
-        printf("[>] IP address: %s\n\n", ip_addr);
+        end_time = clock();
+        time_taken = ((double)(end_time - start_time) * 1000) / CLOCKS_PER_SEC;
+        printf("[>] IP Address: %s  fetched in %.3f ms\n\n", ip_addr, time_taken);
 
         // Add the result to the cache
         addToCache(cache, domain_name, ip_addr, buffer);
