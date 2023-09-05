@@ -7,7 +7,7 @@
 #include <sys/shm.h>
 #include <pthread.h>
 
-#define MAX_CLIENTS 3
+#define MAX_CLIENTS 5
 #define BUFFER_SIZE 1024
 
 struct Client {
@@ -93,24 +93,37 @@ void displayClients(struct ClientList* clientList){
 
 void broadcast(struct ClientList* clientList, int client_socket, char* msg) {
     printf("%s\n", msg);
+    // if (send(client_socket, "0", strlen("0"), 0) == -1) {
+    //     perror("[-] Sending client failed\n");
+    // }
+    struct Client* client = clientList->head->next;
+    while(client){
+        if(client->socket_id != client_socket){
+            if (send(client->socket_id, msg, strlen(msg), 0) == -1) {
+                perror("[-] Sending receiver failed\n");
+            }
+        }
+        client = client->next;
+    }
 }
 
 void message(struct ClientList* clientList, int client_socket, char* msg, char* receiver_name) {
     printf("%s : %s\n",receiver_name, msg);
     int receiver_socket = getClientSocketID(clientList, receiver_name);
     if(receiver_socket == -1){
-        if (send(client_socket, "1", strlen("1"), 0) == -1) {
-            perror("[-] Sending client failed\n");
-        }
+        // if (send(client_socket, "1", strlen("1"), 0) == -1) {
+        //     perror("[-] Sending client failed\n");
+        // }
         printf("Receiver does not exist\n");
     }
     else{
-        if (send(client_socket, "0", strlen("0"), 0) == -1) {
-            perror("[-] Sending client failed\n");
-        }
+        // if (send(client_socket, "0", strlen("0"), 0) == -1) {
+        //     perror("[-] Sending client failed\n");
+        // }
         if (send(receiver_socket, msg, strlen(msg), 0) == -1) {
             perror("[-] Sending receiver failed\n");
         }
+        printf("%d %d\n", client_socket, receiver_socket);
         printf("Sent to receiver\n");
     }
 }
@@ -187,6 +200,7 @@ void* handle_client(void* args) {
         }
     }
 
+    
     deleteClient(clientList, client_name);
     printf("[-] Client %s disconnected\n", client_name);
     printf("[*] Active clients: %d/%d\n", clientList->size, clientList->capacity);
@@ -275,16 +289,6 @@ int main(int argc, char *argv[]) {
         }
         printf("[+] New client connected - %s : %d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
-        
-
-        // // Create a new process to handle the client communication
-        // if (fork() == 0) {
-        //     close(server_socket);
-        //     handle_client(clientList, client_socket);
-        //     exit(0);
-        // }
-
-        // close(client_socket); // Close the client socket in the parent process
     }
 
     for(int i=0; i<MAX_CLIENTS; i++){
