@@ -60,6 +60,7 @@ void* receive(void* args){
 //             break;
 //         }
 //     }
+//     printf("Server stopped at auth\n");
 // }
 
 int main(int argc, char *argv[]) {
@@ -125,11 +126,11 @@ int main(int argc, char *argv[]) {
     while (logged == 0) {
         printf("Enter username: ");
 
-        // fgets(buffer, BUFFER_SIZE, stdin);
-        // printf("s%ds", buffer[0]);
-        // if(buffer[0] == '0'){
-        //     continue;
-        // }
+        fgets(buffer, BUFFER_SIZE, stdin);
+        printf("s%ds", buffer[0]);
+        if(buffer[0] == '\n'){
+            continue;
+        }
 
         if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
             perror("[-] Sending failed\n");
@@ -165,15 +166,15 @@ int main(int argc, char *argv[]) {
     threadArgs->client_socket = client_socket;
     threadArgs->server_status = &server_status;
 
-    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-    printf("%d\n", flags);
-
     pthread_t receive_thread;
     if(pthread_create(&receive_thread, NULL, receive, (void*)threadArgs) != 0){
         perror("pthread create failed");
         return 1;
     }
+
+    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    printf("%d\n", flags);
 
 
 
