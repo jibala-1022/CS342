@@ -141,7 +141,6 @@ void freeCache(struct Cache* cache) {
         node = node->next;
         freeNode(temp);
     }
-    free(cache);
 }
 
 // Function to create DNS flags

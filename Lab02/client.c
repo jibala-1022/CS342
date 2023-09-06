@@ -6,14 +6,14 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <sys/select.h>
-// #include <errno.h>
+
+#define BUFFER_SIZE 1024
 
 struct ThreadArgs {
     int client_socket;
     int* server_status;
 };
 
-#define BUFFER_SIZE 1024
 
 void* receive(void* args){
     struct ThreadArgs* threadArgs = (struct ThreadArgs*)args;
@@ -22,68 +22,61 @@ void* receive(void* args){
 
     char buffer[BUFFER_SIZE];
     int bytes_received;
+
     while(1) {
         memset(buffer, 0, BUFFER_SIZE);
         bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
-        printf("byrec %d\n", bytes_received);
+        // printf("byrec %d\n", bytes_received);
         if (bytes_received <= 0) {
-            perror("[-] Receiving failed\n");
+            printf("Receiving failed - receive\n");
             *server_status = 0;
             break;
         }
         buffer[bytes_received] = '\0';
-        if(buffer[0] == '1'){
-            printf("Invalid command\n");
+        if(buffer[0] == '0'){
+            printf("Sent successfully\n");
+        }
+        else if(buffer[0] == '1'){
+            printf("Invalid message format\n");
         }
         else if(buffer[0] == '2'){
             printf("Invalid recipient\n");
         }
-        else printf("%s\n", buffer);
+        else if(buffer[0] == '3'){
+            printf("%s\n", buffer + 1);
+        }
+        else{
+            printf("Garbage message\n");
+        }
     }
-    printf("Server stopped\n");
-    // close(client_socket);
+    printf("Server terminated\n");
 }
 
-// void* auth(void* args){
-//     struct ThreadArgs* threadArgs = (struct ThreadArgs*)args;
-//     int* server_status = threadArgs->server_status;
-//     int client_socket = threadArgs->client_socket;
-//     char buffer[BUFFER_SIZE];
-//     int bytes_received;
-//     while(1) {
-//         memset(buffer, 0, BUFFER_SIZE);
-//         bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
-//         printf("byrec by auth %d\n", bytes_received);
-//         if (bytes_received <= 0) {
-//             perror("[-] Receiving failed\n");
-//             *server_status = 0;
-//             break;
-//         }
-//     }
-//     printf("Server stopped at auth\n");
-// }
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        printf("[-] Usage: %s <server_ip_address> <port>\n", argv[0]);
+        printf("Usage: %s <server_ip_address> <port>\n", argv[0]);
         return 1;
     }
 
     int port = atoi(argv[2]);
     char* server_ip = argv[1];
 
-    int client_socket;
-    struct sockaddr_in server_addr;
     char buffer[BUFFER_SIZE];
     
+    int bytes_received;
+    int logged = 0;
+    int server_status = 1;
+
     // Create a socket for communication
-    client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (client_socket == -1) {
-        perror("[-] Socket creation failed\n");
+        printf("Socket creation failed\n");
         return 1;
     }
 
     // Configure server address
+    struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = inet_addr(server_ip);
@@ -91,84 +84,69 @@ int main(int argc, char *argv[]) {
 
     // Connect to the server
     if (connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        perror("[-] Connection failed\n");
+        printf("Socket connection failed\n");
         return 1;
     }
 
     // Receive initial response from the server
     memset(buffer, 0, BUFFER_SIZE);
-    recv(client_socket, buffer, BUFFER_SIZE, 0);
-    if (buffer[0] == '1') {
-        perror("[-] Server capacity reached\n");
+    bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
+    if (bytes_received <= 0) {
+        printf("Receiving failed - connection\n");
         close(client_socket);
         return 1;
     }
-    printf("[+] Connected to server...\n\n");
+    if (buffer[0] == '1') {
+        printf("Server capacity reached\n");
+        close(client_socket);
+        return 1;
+    }
 
-    int bytes_received;
-    int logged = 0;
-    int server_status = 1;
+    printf("Connected to server...\n");
 
-    
-    // printf("Error code: %d\n", errno);
-
-    struct ThreadArgs* threadArgs;
-    // threadArgs = (struct ThreadArgs*)malloc(sizeof(struct ThreadArgs));
-    // threadArgs->client_socket = client_socket;
-    // threadArgs->server_status = &server_status;
-
-    // pthread_t auth_thread;
-    // if(pthread_create(&auth_thread, NULL, auth, (void*)threadArgs) != 0){
-    //     perror("pthread create failed");
-    //     return 1;
-    // }
 
     while (logged == 0) {
         printf("Enter username: ");
-
         fgets(buffer, BUFFER_SIZE, stdin);
-        printf("s%ds", buffer[0]);
+        printf("fgets 1\n");
         if(buffer[0] == '\n'){
             continue;
         }
 
         if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
-            perror("[-] Sending failed\n");
-            break;
+            printf("Sending failed - auth\n");
+            return 1;
         }
         if (strcmp(buffer, "/exit\n") == 0) {
-            printf("[-] Connection closed by client\n");
-            break;
+            printf("Connection closed by client\n");
+            return 1;
         }
 
         memset(buffer, 0, BUFFER_SIZE);
         bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
         if (bytes_received <= 0) {
-            perror("[-] Receiving 2 failed\n");
-            break;
+            printf("Receiving failed - auth\n");
+            return 1;
         }
         buffer[bytes_received] = '\0';
-        printf("%s", buffer);
-        printf("%d", buffer[0]);
-        printf("bytes rec %d\n", bytes_received);
-        // if (buffer[0] == '0') {
+
         if (buffer[0] == '0') {
-            printf("Connected\n");
+            printf("Joined the chat\n");
             logged = 1;
             break;
         }
         else{
-            printf("Username exists\n");
+            printf("Username already exists\n");
         }
     }
 
-    threadArgs = (struct ThreadArgs*)malloc(sizeof(struct ThreadArgs));
+    struct ThreadArgs* threadArgs = (struct ThreadArgs*)malloc(sizeof(struct ThreadArgs));
     threadArgs->client_socket = client_socket;
     threadArgs->server_status = &server_status;
 
     pthread_t receive_thread;
     if(pthread_create(&receive_thread, NULL, receive, (void*)threadArgs) != 0){
-        perror("pthread create failed");
+        printf("pthread create failed\n");
         return 1;
     }
 
@@ -177,24 +155,28 @@ int main(int argc, char *argv[]) {
     printf("%d\n", flags);
 
 
-
     while(logged == 1){
         memset(buffer, 0, BUFFER_SIZE);
         fgets(buffer, BUFFER_SIZE, stdin);
-        if (server_status==0 || send(client_socket, buffer, strlen(buffer), 0) == -1) {
-            perror("[-] Sending failed\n");
+        // printf("fgets 2\n");
+        if (server_status==1 && send(client_socket, buffer, strlen(buffer), 0) == -1) {
+            printf("Sending failed - chat\n");
             break;
         }
         if (strcmp(buffer, "/exit\n") == 0) {
-            printf("[-] Connection closed by client\n");
             break;
         }
     }
+
+    if(pthread_join(receive_thread, NULL) != 0){
+            printf("pthread join failed\n");
+        }
     
     // Close the client socket
     close(client_socket);
+    free(threadArgs);
 
-    printf("[-] Client closed\n");
+    printf("Client closed\n");
 
     return 0;
 }
