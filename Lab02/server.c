@@ -7,7 +7,7 @@
 #include <sys/shm.h>
 #include <pthread.h>
 
-#define MAX_CLIENTS 5
+#define MAX_CLIENTS 3
 #define BUFFER_SIZE 1024
 
 struct Client {
@@ -22,6 +22,13 @@ struct ClientList {
     struct Client* head;
 };
 
+struct ThreadArgs {
+    struct ClientList* clientList;
+    int* activeThreads;
+    int threadIndex;
+    int client_socket;
+};
+
 struct Client* createClient(char* name, int socket_id) {
     struct Client* client = (struct Client*)malloc(sizeof(struct Client));
     client->name = strdup(name);
@@ -29,12 +36,6 @@ struct Client* createClient(char* name, int socket_id) {
     client->next = NULL;
     return client;
 }
-
-struct ThreadArgs {
-    struct ClientList* clientList;
-    int* activeThreads;
-    int client_socket;
-};
 
 void freeClient(struct Client* client){
     free(client->name);
@@ -53,10 +54,12 @@ int getClientSocketID(struct ClientList* clientList, char* name){
     struct Client* client = clientList->head->next;
     while(client){
         if(strcmp(name, client->name) == 0){
+            printf("A %d\n", client->socket_id);
             return client->socket_id;
         }
         client = client->next;
     }
+    printf("NA -1\n");
     return -1;
 }
 
@@ -129,21 +132,23 @@ void message(struct ClientList* clientList, int client_socket, char* msg, char* 
 }
 
 // Function to handle communication with a client
-void* handle_client(void* args) {
+void* handleClient(void* args) {
     struct ThreadArgs* threadArgs = (struct ThreadArgs*)args;
     struct ClientList* clientList = threadArgs->clientList;
     int* activeThreads = threadArgs->activeThreads;
+    int threadIndex = threadArgs->threadIndex;
     int client_socket = threadArgs->client_socket;
 
     int bytes_received;
     int logged=0;
     char client_name[BUFFER_SIZE];
     char buffer[BUFFER_SIZE];
-    while (1) {
-        if (send(client_socket, "Enter username:\n", strlen("Enter username:\n"), 0) == -1) {
-            perror("[-] Sending failed\n");
-            break;
-        }
+
+    while (logged == 0) {
+        // if (send(client_socket, "Enter username:\n", strlen("Enter username:\n"), 0) == -1) {
+        //     perror("[-] Sending failed\n");
+        //     break;
+        // }
 
         memset(buffer, 0, BUFFER_SIZE);
         bytes_received = recv(client_socket, client_name, BUFFER_SIZE, 0);
@@ -153,16 +158,8 @@ void* handle_client(void* args) {
         printf("bytes rec %d\n", bytes_received);
         client_name[bytes_received-1] = '\0';
 
-        if(getClientSocketID(clientList, client_name) != -1){
-            if (send(client_socket, "1", strlen("1"), 0) == -1) {
-                perror("[-] Sending failed\n");
-                break;
-            }
-            printf("Username exists\n");
-            continue;
-        }
-        else{
-            if (send(client_socket, "0", strlen("0"), 0) == -1) {
+        if(getClientSocketID(clientList, client_name) == -1){
+            if (send(client_socket, "00", strlen("00"), 0) == -1) {
                 perror("[-] Sending failed\n");
                 break;
             }
@@ -170,11 +167,17 @@ void* handle_client(void* args) {
             displayClients(clientList);
             printf("Client %s added\n", client_name);
             logged=1;
-            break;
+        }
+        else{
+            if (send(client_socket, "11", strlen("11"), 0) == -1) {
+                perror("[-] Sending failed\n");
+                break;
+            }
+            printf("Username exists\n");
         }
     }
 
-    while (logged) {
+    while (logged == 1) {
         memset(buffer, 0, BUFFER_SIZE);
         bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
         if (bytes_received <= 0) {
@@ -200,7 +203,7 @@ void* handle_client(void* args) {
         }
     }
 
-    
+    activeThreads[threadIndex] = 0;
     deleteClient(clientList, client_name);
     printf("[-] Client %s disconnected\n", client_name);
     printf("[*] Active clients: %d/%d\n", clientList->size, clientList->capacity);
@@ -219,26 +222,22 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
-    // Create the server socket
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == -1) {
         perror("[-] Socket creation failed\n");
         return 1;
     }
 
-    // Configure server address
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(port);
 
-    // Bind the server socket to the specified port
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
         perror("[-] Binding failed\n");
         return 1;
     }
 
-    // Start listening for incoming connections
     if (listen(server_socket, MAX_CLIENTS) == -1) {
         perror("[-] Listening failed\n");
         return 1;
@@ -252,9 +251,7 @@ int main(int argc, char *argv[]) {
     threadArgs->activeThreads = (int*)malloc(MAX_CLIENTS * sizeof(int));
     memset(threadArgs->activeThreads, 0, sizeof(threadArgs->activeThreads));
 
-    addClient(clientList, "balaji", 21);
     displayClients(clientList);
-    // addClient(clientList, "balaji\n"); 
 
     pthread_t threads[MAX_CLIENTS];
 
@@ -266,29 +263,38 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // Check if the server has reached maximum client capacity
-        if (clientList->size == clientList->capacity) {
-            printf("[-] Server capacity reached\n");
-            printf("[*] Active clients: %d/%d\n", clientList->size, clientList->capacity);
-            send(client_socket, "0", strlen("0"), 0);
-            close(client_socket);
-            continue;
+        for(int j=0; j<MAX_CLIENTS; j++){
+            printf("%d ", threadArgs->activeThreads[j]);
         }
-        send(client_socket, "1", strlen("1"), 0);
+        printf("\n");
+
         threadArgs->client_socket = client_socket;
-        for(int i=0; i<MAX_CLIENTS; i++){
+        int i;
+        for(i=0; i<MAX_CLIENTS; i++){
             if(threadArgs->activeThreads[i]==0){
                 printf("i=%d\n", i);
-                threadArgs->activeThreads[i]=1;
-                if(pthread_create(&threads[i], NULL, handle_client, (void*)threadArgs) != 0){
+                threadArgs->activeThreads[i] = 1;
+                threadArgs->threadIndex = i;
+                if (send(client_socket, "0", strlen("0"), 0) == -1) {
+                    perror("[-] Sending receiver failed\n");
+                    break;
+                }
+                printf("[+] New client connected - %s : %d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+                if(pthread_create(&threads[i], NULL, handleClient, (void*)threadArgs) != 0){
                     perror("pthread create failed");
                     break;
                 }
                 break;
             }
         }
-        printf("[+] New client connected - %s : %d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-
+        if(i == MAX_CLIENTS){
+            if (send(client_socket, "1", strlen("1"), 0) == -1) {
+                perror("[-] Sending receiver failed\n");
+                break;
+            }
+            printf("[-] Server capacity reached\n");
+            close(client_socket);
+        }
     }
 
     for(int i=0; i<MAX_CLIENTS; i++){
