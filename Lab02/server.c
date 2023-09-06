@@ -90,7 +90,7 @@ void displayClients(struct ClientList* clientList){
     printf("Clients in the server:\n");
     int count=0;
     while(client){
-        printf("%d. %s %d\n", count++, client->name, client->socket_id);
+        printf("%d. %s %d\n", ++count, client->name, client->socket_id);
         client = client->next;
     }
 }
@@ -200,7 +200,7 @@ void* handleClient(void* args) {
         }
         buffer[bytes_received-1] = '\0';
 
-        printf("Client %s sent: %s\n", client_name, buffer);
+        // printf("Client %s sent: %s\n", client_name, buffer);
         // if (strncmp(buffer, "/private", strlen("/private")) == 0) {
         //     // Extract the receiver's name (the second word)
         //     char* token = strtok(buffer, " ");
@@ -305,7 +305,7 @@ int main(int argc, char *argv[]) {
         int i;
         for(i=0; i<MAX_CLIENTS; i++){
             if(threadArgs->activeThreads[i]==0){
-                printf("i=%d\n", i);
+                // printf("i=%d\n", i);
                 threadArgs->activeThreads[i] = 1;
                 threadArgs->threadIndex = i;
                 if (send(client_socket, "0", strlen("0"), 0) == -1) {

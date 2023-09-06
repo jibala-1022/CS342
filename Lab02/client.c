@@ -33,8 +33,15 @@ void* receive(void* args){
             break;
         }
         buffer[bytes_received] = '\0';
+        // fgets(buffer, BUFFER_SIZE, stdin);
+        // printf("%s\n", buffer);
+        // printf("%ld\n", strlen(buffer));
+        // if(strlen(buffer) != 0 && buffer[0] != '0'){
+        //     printf("\n");
+        // }
+
         if(buffer[0] == '0'){
-            printf("Sent successfully\n");
+            // printf("Sent successfully\n");
         }
         else if(buffer[0] == '1'){
             printf("Invalid message format\n");
@@ -108,7 +115,7 @@ int main(int argc, char *argv[]) {
     while (logged == 0) {
         printf("Enter username: ");
         fgets(buffer, BUFFER_SIZE, stdin);
-        printf("fgets 1\n");
+        // printf("fgets 1\n");
         if(buffer[0] == '\n'){
             continue;
         }
@@ -152,7 +159,7 @@ int main(int argc, char *argv[]) {
 
     int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-    printf("%d\n", flags);
+    // printf("%d\n", flags);
 
 
     while(logged == 1){
