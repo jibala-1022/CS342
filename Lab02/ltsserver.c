@@ -94,11 +94,11 @@ void displayClients(struct ClientList* clientList){
     printf("_\n");
 }
 
-void broadcast(struct ClientList* clientList, char* client_name, int client_socket, char* msg) {
+void broadcast(struct ClientList* clientList, int client_socket, char* msg) {
     printf("%s\n", msg);
-    if (send(client_socket, "0", strlen("0"), 0) == -1) {
-        perror("[-] Sending client failed\n");
-    }
+    // if (send(client_socket, "0", strlen("0"), 0) == -1) {
+    //     perror("[-] Sending client failed\n");
+    // }
     struct Client* client = clientList->head->next;
     while(client){
         if(client->socket_id != client_socket){
@@ -110,19 +110,19 @@ void broadcast(struct ClientList* clientList, char* client_name, int client_sock
     }
 }
 
-void message(struct ClientList* clientList, char* client_name, int client_socket, char* msg, char* receiver_name) {
+void message(struct ClientList* clientList, int client_socket, char* msg, char* receiver_name) {
     printf("%s : %s\n",receiver_name, msg);
     int receiver_socket = getClientSocketID(clientList, receiver_name);
     if(receiver_socket == -1){
-        if (send(client_socket, "2", strlen("2"), 0) == -1) {
-            perror("[-] Sending client failed\n");
-        }
+        // if (send(client_socket, "1", strlen("1"), 0) == -1) {
+        //     perror("[-] Sending client failed\n");
+        // }
         printf("Receiver does not exist\n");
     }
     else{
-        if (send(client_socket, "0", strlen("0"), 0) == -1) {
-            perror("[-] Sending client failed\n");
-        }
+        // if (send(client_socket, "0", strlen("0"), 0) == -1) {
+        //     perror("[-] Sending client failed\n");
+        // }
         if (send(receiver_socket, msg, strlen(msg), 0) == -1) {
             perror("[-] Sending receiver failed\n");
         }
@@ -145,6 +145,11 @@ void* handleClient(void* args) {
     char buffer[BUFFER_SIZE];
 
     while (logged == 0) {
+        // if (send(client_socket, "Enter username:\n", strlen("Enter username:\n"), 0) == -1) {
+        //     perror("[-] Sending failed\n");
+        //     break;
+        // }
+
         memset(buffer, 0, BUFFER_SIZE);
         bytes_received = recv(client_socket, client_name, BUFFER_SIZE, 0);
         if (bytes_received <= 0) {
@@ -152,10 +157,9 @@ void* handleClient(void* args) {
         }
         printf("bytes rec %d\n", bytes_received);
         client_name[bytes_received-1] = '\0';
-        printf("name%srec\n", client_name);
 
         if(getClientSocketID(clientList, client_name) == -1){
-            if (send(client_socket, "0", strlen("0"), 0) == -1) {
+            if (send(client_socket, "00", strlen("00"), 0) == -1) {
                 perror("[-] Sending failed\n");
                 break;
             }
@@ -165,7 +169,7 @@ void* handleClient(void* args) {
             logged=1;
         }
         else{
-            if (send(client_socket, "1", strlen("1"), 0) == -1) {
+            if (send(client_socket, "11", strlen("11"), 0) == -1) {
                 perror("[-] Sending failed\n");
                 break;
             }
@@ -189,15 +193,12 @@ void* handleClient(void* args) {
             token = strtok(NULL, " "); // Get the second word
             if (token != NULL) {
                 // Send the message to the receiver
-                message(clientList, client_name, client_socket, buffer + strlen("/private") + strlen(token) + 2, token);
+                message(clientList, client_socket, buffer + strlen("/private") + strlen(token) + 2, token);
             }
         } else if (strncmp(buffer, "/broadcast", strlen("/broadcast")) == 0) {
             // Send a broadcast message (excluding the "/broadcast" prefix)
-            broadcast(clientList, client_name, client_socket, buffer + strlen("/broadcast") + 1);
+            broadcast(clientList, client_socket, buffer + strlen("/broadcast") + 1);
         } else {
-            if (send(client_socket, "1", strlen("1"), 0) == -1) {
-                perror("[-] Sending client failed\n");
-            }
             printf("Invalid command\n");
         }
     }

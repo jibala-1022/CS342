@@ -8,59 +8,22 @@
 #include <sys/select.h>
 // #include <errno.h>
 
-struct ThreadArgs {
-    int client_socket;
-    int* server_status;
-};
-
 #define BUFFER_SIZE 1024
 
 void* receive(void* args){
-    struct ThreadArgs* threadArgs = (struct ThreadArgs*)args;
-    int client_socket = threadArgs->client_socket;
-    int* server_status = threadArgs->server_status;
-
+    int client_socket = *(int*)args;
     char buffer[BUFFER_SIZE];
     int bytes_received;
     while(1) {
         memset(buffer, 0, BUFFER_SIZE);
         bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
-        printf("byrec %d\n", bytes_received);
         if (bytes_received <= 0) {
             perror("[-] Receiving failed\n");
-            *server_status = 0;
-            break;
         }
         buffer[bytes_received] = '\0';
-        if(buffer[0] == '1'){
-            printf("Invalid command\n");
-        }
-        else if(buffer[0] == '2'){
-            printf("Invalid recipient\n");
-        }
-        else printf("%s\n", buffer);
+        printf("%s", buffer);
     }
-    printf("Server stopped\n");
-    // close(client_socket);
 }
-
-// void* auth(void* args){
-//     struct ThreadArgs* threadArgs = (struct ThreadArgs*)args;
-//     int* server_status = threadArgs->server_status;
-//     int client_socket = threadArgs->client_socket;
-//     char buffer[BUFFER_SIZE];
-//     int bytes_received;
-//     while(1) {
-//         memset(buffer, 0, BUFFER_SIZE);
-//         bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
-//         printf("byrec by auth %d\n", bytes_received);
-//         if (bytes_received <= 0) {
-//             perror("[-] Receiving failed\n");
-//             *server_status = 0;
-//             break;
-//         }
-//     }
-// }
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
@@ -105,32 +68,20 @@ int main(int argc, char *argv[]) {
     printf("[+] Connected to server...\n\n");
 
     int bytes_received;
-    int logged = 0;
-    int server_status = 1;
 
-    
-    // printf("Error code: %d\n", errno);
+    while (1) {
+        // memset(buffer, 0, BUFFER_SIZE);
+        // bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
+        // if (bytes_received <= 0) {
+        //     perror("[-] Receiving 1 failed\n");
+        //     break;
+        // }
+        // buffer[bytes_received] = '\0';
+        // printf("%s", buffer);
 
-    struct ThreadArgs* threadArgs;
-    // threadArgs = (struct ThreadArgs*)malloc(sizeof(struct ThreadArgs));
-    // threadArgs->client_socket = client_socket;
-    // threadArgs->server_status = &server_status;
-
-    // pthread_t auth_thread;
-    // if(pthread_create(&auth_thread, NULL, auth, (void*)threadArgs) != 0){
-    //     perror("pthread create failed");
-    //     return 1;
-    // }
-
-    while (logged == 0) {
         printf("Enter username: ");
 
-        // fgets(buffer, BUFFER_SIZE, stdin);
-        // printf("s%ds", buffer[0]);
-        // if(buffer[0] == '0'){
-        //     continue;
-        // }
-
+        fgets(buffer, BUFFER_SIZE, stdin);
         if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
             perror("[-] Sending failed\n");
             break;
@@ -153,7 +104,6 @@ int main(int argc, char *argv[]) {
         // if (buffer[0] == '0') {
         if (buffer[0] == '0') {
             printf("Connected\n");
-            logged = 1;
             break;
         }
         else{
@@ -161,26 +111,26 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    threadArgs = (struct ThreadArgs*)malloc(sizeof(struct ThreadArgs));
-    threadArgs->client_socket = client_socket;
-    threadArgs->server_status = &server_status;
-
-    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-    printf("%d\n", flags);
-
     pthread_t receive_thread;
-    if(pthread_create(&receive_thread, NULL, receive, (void*)threadArgs) != 0){
+    if(pthread_create(&receive_thread, NULL, receive, (void*)&client_socket) != 0){
         perror("pthread create failed");
         return 1;
     }
+    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    printf("%d\n", flags);
+    // printf("Error code: %d\n", errno);
 
-
-
-    while(logged == 1){
+    while(1){
         memset(buffer, 0, BUFFER_SIZE);
         fgets(buffer, BUFFER_SIZE, stdin);
-        if (server_status==0 || send(client_socket, buffer, strlen(buffer), 0) == -1) {
+        // if (fgets(buffer, BUFFER_SIZE, stdin) == NULL) {
+        // // if(read(STDIN_FILENO, buffer, sizeof(buffer)) == -1){
+        //     perror("fgets failed\n");
+        //     printf("Error code: %d\n", errno);
+        //     break;  
+        // }
+        if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
             perror("[-] Sending failed\n");
             break;
         }
