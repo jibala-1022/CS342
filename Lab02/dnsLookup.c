@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <limits.h>
 
 // Uncomment below line to execute in debug mode
 // #define DEBUG
@@ -39,6 +40,7 @@ struct Question {
 struct Node {
     char* domain_name;
     uint32_t ip_addr[20];
+    time_t expiry_time;
     char* response;
     struct Node* next;
     struct Node* prev;
@@ -52,47 +54,59 @@ struct Cache {
     struct Node* tail;
 };
 
-void parseResponse(uint32_t* ip_addr, char* response, uint16_t answer_rr_count){
+void parseResponse(struct Node* node, char* response, uint16_t answer_rr_count){
+    uint32_t* ip_addr = node->ip_addr;
+    uint32_t min_ttl = UINT_MAX;
+
     uint16_t type;
+    uint16_t class;
+    uint32_t ttl;
+    uint16_t data_length;
     uint32_t ip;
-    uint32_t data_length;
+
     int count=0;
     // printf("%d %d %d %d\n", response[0], response[1], response[2], response[3]);
     // response++;
     for(int i=0; i<answer_rr_count; i++){
         response += 2;
+
         type = response[0];
         type = (type << 8) + response[1];
-        response += 8;
+        response += 2;
+
+        class = response[0];
+        class = (class << 8) + response[1];
+        response += 2;
+
+        ttl = response[0];
+        ttl = (ttl << 8) + response[1];
+        ttl = (ttl << 8) + response[2];
+        ttl = (ttl << 8) + response[3];
+        response += 4;
+
+        data_length = response[0];
+        data_length = (data_length << 8) + response[1];
+        response += 2;
+
         if(type == 1) {
-            response += 2;
-            ip =             (uint8_t)response[0];
+            ip = (uint8_t)response[0];
             ip = (ip << 8) | (uint8_t)response[1];
             ip = (ip << 8) | (uint8_t)response[2];
             ip = (ip << 8) | (uint8_t)response[3];
-
-            uint32_t fhwiow = response[0]*(1<<24) + response[1]*(1<<16) + response[2]*(1<<8) + response[3]*(1<<0);
-
-            // ip =             response[0];
-            // printf("%d %d %d %d\n", response[0], response[1], response[2], response[3]);
-            // response++;
-            // ip = (ip << 8) | response[0];
-            // response++;
-            // ip = (ip << 8) | response[0];
-            // response++;
-            // ip = (ip << 8) | response[0];
+            response += 4;
 
             ip_addr[count] = ip;
             count++;
-            response += 4;
+            min_ttl = (min_ttl < ttl) ? min_ttl : ttl;
         }
         else {
-            data_length = *response;
-            data_length = (data_length << 8) | response[1];
-            response += data_length + 2;
+            response += data_length;
         }
     }
     ip_addr[count] = 0;
+
+    time_t timestamp = time(NULL);
+    node->expiry_time = timestamp + min_ttl;
 }
 
 // Function to create a new node
@@ -100,7 +114,7 @@ struct Node* createNode(char* domain_name, char* response, size_t query_size, ui
     struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
     newNode->domain_name = strdup(domain_name);
     // printf("qs%ld\n", query_size);
-    parseResponse(newNode->ip_addr, response + query_size, answer_rr_count);
+    parseResponse(newNode, response + query_size, answer_rr_count);
     newNode->response = strdup(response);
     newNode->next = NULL;
     newNode->prev = NULL;
@@ -128,7 +142,7 @@ struct Cache* initCache(int capacity) {
 }
 
 // Function to add a node to the front of the cache
-void addToFront(struct Cache* cache, struct Node* node) {
+void addNode(struct Cache* cache, struct Node* node) {
     cache->head->next->prev = node;
     node->next = cache->head->next;
     cache->head->next = node;
@@ -137,7 +151,7 @@ void addToFront(struct Cache* cache, struct Node* node) {
 }
 
 // Function to move a node to the front of the cache
-void moveToFront(struct Cache* cache, struct Node* node) {
+void updateNode(struct Cache* cache, struct Node* node) {
     node->prev->next = node->next;
     node->next->prev = node->prev;
     cache->head->next->prev = node;
@@ -146,14 +160,14 @@ void moveToFront(struct Cache* cache, struct Node* node) {
     node->prev = cache->head;
 }
 
-// Function to remove a node from the tail of the cache
-void removeFromTail(struct Cache* cache) {
+void removeNode(struct Cache* cache, struct Node* node) {
     struct Node* evicted_node = cache->tail->prev;
-    cache->tail->prev->prev->next = cache->tail;
-    cache->tail->prev = cache->tail->prev->prev;
+    node->prev->next = node->next;
+    node->next->prev = node->prev;
     freeNode(evicted_node);
     cache->size--;
 }
+
 
 void displayIp(struct Node* cacheNode) {
     uint32_t* ip_addr = cacheNode->ip_addr;
@@ -167,20 +181,28 @@ void displayIp(struct Node* cacheNode) {
 // Function to add a node to the cache
 struct Node* addToCache(struct Cache* cache, char* domain_name, char* response, size_t query_size, uint16_t answer_rr_count) {
     if (cache->size == cache->capacity) {
-        removeFromTail(cache);
+        removeNode(cache, cache->tail->prev);
     }
     struct Node* newNode = createNode(domain_name, response, query_size, answer_rr_count);
-    addToFront(cache, newNode);
+    addNode(cache, newNode);
     return newNode;
 }
 
 // Function to get an entry from the cache
 struct Node* getFromCache(struct Cache* cache, char* domain_name) {
     struct Node* node = cache->head->next;
+    time_t timestamp = time(NULL);
     while (node != cache->tail) {
         if (strcmp(node->domain_name, domain_name) == 0) {
-            moveToFront(cache, node);
-            return node;
+            if(timestamp > node->expiry_time){
+                removeNode(cache, node);
+                printf("Cache expired\n");
+                return NULL;
+            }
+            else{
+                updateNode(cache, node);
+                return node;
+            }
         }
         node = node->next;
     }

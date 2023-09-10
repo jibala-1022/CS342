@@ -7,7 +7,12 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <stddef.h>
+#include <time.h>
 
+
+
+
+int count=0;
 // Define data structures
 struct WebPage {
     char url[255];
@@ -16,7 +21,7 @@ struct WebPage {
 
 // Linked list node to track page accesses
 struct CacheNode {
-    struct WebPage page;
+    struct WebPage* page;
     struct CacheNode* next;
 };
 
@@ -32,7 +37,7 @@ void initializeCache();
 struct CacheNode* findPage(const char* url);
 void moveToFront(struct CacheNode* node);
 void evictLRU();
-char* retrieveWebPage(const char* url);
+char* retrieveWebPage(const char* url,double* total_time);
 void fetchWebPage(const char* url);
 void displayCacheContents();
 int sendHttpRequest(const char* hostname, const char* path, char* response);
@@ -47,7 +52,7 @@ void initializeCache() {
 struct CacheNode* findPage(const char* url) {
     struct CacheNode* current = cache;
     while (current != NULL) {
-        if (strcmp(current->page.url, url) == 0) {
+        if (strcmp(current->page->url, url) == 0) {
             return current;
         }
         current = current->next;
@@ -120,7 +125,7 @@ int sendHttpRequest(const char* hostname, const char* path, char* response) {
 
     bzero((char*)&server_addr, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    bcopy((char*)server->h_addr, (char*)&server_addr.sin_addr.s_addr, server->h_length);
+    bcopy((char*)server->h_addr_list[0], (char*)&server_addr.sin_addr.s_addr, server->h_length);
     server_addr.sin_port = htons(80);
 
     if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
@@ -147,7 +152,7 @@ int sendHttpRequest(const char* hostname, const char* path, char* response) {
     int bytesRead;
     char buffer[4096]; // Temporary buffer to store response chunks
 
-    while ((bytesRead = read(sockfd, buffer, sizeof(buffer))) > 0) {
+    if ((bytesRead = read(sockfd, buffer, sizeof(buffer))) > 0) {
         // Append the received chunk to the response
         memcpy(response + totalBytes, buffer, bytesRead);
         totalBytes += bytesRead;
@@ -162,47 +167,44 @@ int sendHttpRequest(const char* hostname, const char* path, char* response) {
 
 
 
-
-
+clock_t start_time, end_time;
 
 // Retrieve a web page from the cache or fetch it via HTTP GET
-char* retrieveWebPage(const char* url) {
+char* retrieveWebPage(const char* url, double* total_time) {
+	start_time=clock();
     struct CacheNode* node = findPage(url);
-
     if (node != NULL) {
         moveToFront(node);
-        return node->page.content;
-    } else {
-        if (cacheSize >= MAX_CACHE_SIZE) {
-            evictLRU();
-        }
-        fetchWebPage(url);
-        return retrieveWebPage(url); // Retry after fetching
+        end_time=clock();
+        printf("\n\nPage contents (Cached):\n\n ");
+        *total_time = (double)(end_time - start_time)/ CLOCKS_PER_SEC;
+        return node->page->content;
+    } 
+    while (cacheSize >= MAX_CACHE_SIZE) {
+        evictLRU();
     }
+    fetchWebPage(url);
+    node = findPage(url);
+    if (node != NULL) {
+        moveToFront(node);
+        end_time=clock();
+        printf("\n\nPage contents:\n\n ");
+        *total_time = (double)(end_time - start_time)/ CLOCKS_PER_SEC;
+        return node->page->content;
+    } 
+
+    return NULL; // Retry after fetching
 }
-
-
-
 
 
 
 
 // Fetch a web page via HTTP GET
 void fetchWebPage(const char* url) {
-
-
-// Extract hostname and path from the URL
-char hostname[255];
-char path[255];
-if (sscanf(url, "http://%[^/]/%s", hostname, path) != 2) {
-    fprintf(stderr, "Invalid URL format: %s\n", url);
-    return;
-}
-
-
     // Check if the URL starts with "http://"
     if (strncmp(url, "http://", 7) != 0) {
         fprintf(stderr, "Invalid URL format: %s\n", url);
+        count++;
         return;
     }
 
@@ -210,38 +212,33 @@ if (sscanf(url, "http://%[^/]/%s", hostname, path) != 2) {
     const char* pathStart = strchr(url + 7, '/');
     if (pathStart == NULL) {
         fprintf(stderr, "Invalid URL format: %s\n", url);
+        count++;
         return;
     }
 
     // Calculate the position of the hostname and path
     ptrdiff_t hostnameLength = pathStart - (url + 7);
-    
-    
-    
-    //hostname = url + 7;
-    //path = pathStart;
-    
-    // You cannot assign directly to arrays, so use strncpy to copy the values
-	strncpy(hostname, url + 7, hostnameLength);
-	hostname[hostnameLength] = '\0'; // Null-terminate the string
 
-	strncpy(path, pathStart, sizeof(path) - 1);
-	path[sizeof(path) - 1] = '\0'; // Null-terminate the string
-    
-    
-    
+    char hostname[256]; // Adjust the buffer size as needed
+    char path[256];     // Adjust the buffer size as needed
+
+    strncpy(hostname, url + 7, hostnameLength);
+    hostname[hostnameLength] = '\0'; // Null-terminate the string
+
+    strcpy(path, pathStart);
 
     // Send an HTTP GET request and receive the response
     char response[16384];
     int bytesReceived = sendHttpRequest(hostname, path, response);
 
     // Create a new cache node
-    struct WebPage newPage;
-    strcpy(newPage.url, url);
+    struct WebPage *newPage = (struct WebPage *)malloc(sizeof(struct WebPage));
+    
+    strcpy(newPage->url, url);
     if (bytesReceived > 0) {
-        strncpy(newPage.content, response, sizeof(newPage.content) - 1);
+        strncpy(newPage->content, response, sizeof(newPage->content) - 1);
     } else {
-        strcpy(newPage.content, "Error fetching page.");
+        strcpy(newPage->content, "Error fetching page.");
     }
 
     struct CacheNode* newNode = malloc(sizeof(struct CacheNode));
@@ -250,7 +247,11 @@ if (sscanf(url, "http://%[^/]/%s", hostname, path) != 2) {
 
     cache = newNode;
     cacheSize++;
+    free(newPage);
 }
+
+
+
 
 
 
@@ -264,13 +265,14 @@ void displayCacheContents() {
     struct CacheNode* current = cache;
     printf("Cache Contents (Most to Least Recently Used):\n");
     while (current != NULL) {
-        printf("%s\n", current->page.url);
+        printf("%s\n", current->page->url);
         current = current->next;
     }
 }
 
 int main() {
     char url[255];
+    double total_time;
 
     initializeCache();
 
@@ -289,8 +291,15 @@ int main() {
         break; // Exit the loop and quit the program
     }
 
-    char* content = retrieveWebPage(url);
-    printf("Page content:\n%s\n", content);
+    char* content = retrieveWebPage(url,&total_time);
+
+    if(content==NULL){
+        continue;
+    }
+    printf("%s\n", content);
+    printf("Fetched in: %.3f s\n\n",total_time);
+    
+    
     displayCacheContents();
 }
 
