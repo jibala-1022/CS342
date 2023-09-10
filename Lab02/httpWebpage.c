@@ -162,7 +162,7 @@ char* retrieveWebPage(const char* url) {
     if (node != NULL) {
         moveToFront(node);
         end_time=clock();
-        printf("\n\nPage contents (Cached):\n\n ");
+        printf("\nPage contents (Cached):\n\n ");
         return node->page->content;
     } 
     while (cacheSize >= MAX_CACHE_SIZE) {
@@ -173,7 +173,7 @@ char* retrieveWebPage(const char* url) {
     if (node != NULL) {
         moveToFront(node);
         end_time=clock();
-        printf("\n\nPage contents:\n\n ");
+        printf("\nPage contents:\n\n ");
         return node->page->content;
     } 
     return NULL; // Retry after fetching
@@ -247,9 +247,6 @@ int main() {
     while (1) {
         printf("Enter URL (or 'exit' to quit): ");
         fgets(url, sizeof(url), stdin);
-        
-        // printf("Entered URL: %s", url);
-        start_time = clock();
 
         // Remove trailing newline
         if (url[strlen(url) - 1] == '\n') {
@@ -266,10 +263,9 @@ int main() {
             continue;
         }
 
-        end_time = clock();
         time_taken = ((double)(end_time - start_time) * 1000) / CLOCKS_PER_SEC;
         printf("%s\n", content);
-        printf("Fetched in: %.3f ms\n\n", time_taken);
+        printf("\nFetched in: %.3f ms\n\n", time_taken);
         displayCacheContents();
     }
     return 0;
