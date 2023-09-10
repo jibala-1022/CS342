@@ -239,7 +239,7 @@ void* handleClient(void* args) {
 
     activeThreads[threadIndex] = 0;
     deleteClient(clientList, client_name);
-    printf("%s disconnected\n", client_name);
+    printf("%s left the chat\n", client_name);
     printf("Active clients: %d/%d\n", clientList->size, clientList->capacity);
     close(client_socket);
 }

@@ -33,6 +33,7 @@ void* receive(void* args){
             break;
         }
         buffer[bytes_received] = '\0';
+
         // fgets(buffer, BUFFER_SIZE, stdin);
         // printf("%s\n", buffer);
         // printf("%ld\n", strlen(buffer));
@@ -51,6 +52,7 @@ void* receive(void* args){
         }
         else if(buffer[0] == '3'){
             printf("%s\n", buffer + 1);
+            fflush(stdin);
         }
         else{
             printf("Garbage message\n");

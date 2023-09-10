@@ -20,7 +20,7 @@
 
 // Define a structure for the DNS header
 struct Header {
-    uint16_t id;
+    uint16_t transaction_id;
     uint16_t flags;
     uint16_t question_count;
     uint16_t answer_rr_count;
@@ -179,8 +179,8 @@ void domainNametoDnsName(char* domain_name) {
 size_t generateQuery(char* buffer, struct Header* dnsHeader, struct Question* dnsQuestion) {
     size_t name_sz = strlen(dnsQuestion->name) + 1;
 
-    buffer[0] = dnsHeader->id >> 8;
-    buffer[1] = dnsHeader->id;
+    buffer[0] = dnsHeader->transaction_id >> 8;
+    buffer[1] = dnsHeader->transaction_id;
 
     buffer[2] = dnsHeader->flags >> 8;
     buffer[3] = dnsHeader->flags;
@@ -219,11 +219,11 @@ int main() {
     // Create a UDP socket
     int client_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (client_socket == -1) {
-        perror("[-] Socket creation failed\n");
+        perror("Socket creation failed\n");
         return 1;
     }
     #ifdef DEBUG
-    printf("[+] Socket created successfully\n");
+    printf("Socket created successfully\n");
     #endif
 
     // Set up the DNS server address
@@ -235,7 +235,7 @@ int main() {
 
     // Initialize DNS header and question
     struct Header dnsHeader;
-    dnsHeader.id = getpid();
+    dnsHeader.transaction_id = getpid();
     dnsHeader.flags = createDnsFlags(0, 0, 0, 0, 1, 0, 0, 0);
     dnsHeader.question_count = 1;
     dnsHeader.answer_rr_count = 0;
@@ -251,7 +251,7 @@ int main() {
 
     // Main loop to handle DNS queries
     while (1) {
-        printf("[<] Enter the domain name to lookup (or '/exit' to quit): ");
+        printf("Enter the domain name to lookup (or '/exit' to quit): ");
         fgets(domain_name, DOMAIN_NAME_SIZE, stdin);
 
         if (strcmp(domain_name, "/exit\n") == 0) {
@@ -265,7 +265,7 @@ int main() {
         if (ip_addr) {
             end_time = clock();
             time_taken = ((double)(end_time - start_time) * 1000) / CLOCKS_PER_SEC;
-            printf("[>] IP Address (Cached): %s  fetched in %.3f ms\n\n", ip_addr, time_taken);
+            printf("IP Address (Cached): %s  fetched in %.3f ms\n\n", ip_addr, time_taken);
             continue;
         }
 
@@ -274,22 +274,22 @@ int main() {
         // Generate and send DNS query
         size_t query_size = generateQuery(buffer, &dnsHeader, &dnsQuestion);
         if (sendto(client_socket, buffer, query_size, 0, (struct sockaddr*)&dns_server_addr, sizeof(dns_server_addr)) == -1) {
-            perror("[-] Sending failed\n");
+            perror("Sending failed\n");
             break;
         }
         #ifdef DEBUG
-        printf("[+] Sending successful\n");
+        printf("Sending successful\n");
         #endif
 
         // Receive DNS response
         socklen_t dns_server_addr_len = sizeof(dns_server_addr);
         memset(buffer, 0, BUFFER_SIZE);
         if (recvfrom(client_socket, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&dns_server_addr, &dns_server_addr_len) <= 0) {
-            perror("[-] Receiving failed\n");
+            perror("Receiving failed\n");
             break;
         }
         #ifdef DEBUG
-        printf("[+] Receiving successful\n");
+        printf("Receiving successful\n");
         #endif
 
         // Extract and display IP address from the response
@@ -298,7 +298,7 @@ int main() {
         if (res_answer_rr_count == 0) {
             end_time = clock();
             time_taken = ((double)(end_time - start_time) * 1000) / CLOCKS_PER_SEC;
-            printf("[>] IP Address: Not found\n\n");
+            printf("IP Address: Not found\n\n");
             continue;
         }
 
@@ -306,12 +306,13 @@ int main() {
         for (int i = 0; i < 4; i++) {
             ip[i] = buffer[query_size + 12 + i];
         }
+        
         char buff[16];
         sprintf(buff, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
         ip_addr = buff;
         end_time = clock();
         time_taken = ((double)(end_time - start_time) * 1000) / CLOCKS_PER_SEC;
-        printf("[>] IP Address: %s  fetched in %.3f ms\n\n", ip_addr, time_taken);
+        printf("IP Address: %s  fetched in %.3f ms\n\n", ip_addr, time_taken);
 
         // Add the result to the cache
         addToCache(cache, domain_name, ip_addr, buffer);
@@ -320,14 +321,14 @@ int main() {
     // Close the socket and free allocated memory
     close(client_socket);
     #ifdef DEBUG
-    printf("[-] Client disconnected\n");
+    printf("Client disconnected\n");
     #endif
 
     free(buffer);
     free(domain_name);
     freeCache(cache);
     #ifdef DEBUG
-    printf("[-] Freed heap memory\n");
+    printf("Freed heap memory\n");
     #endif
 
     return 0;
