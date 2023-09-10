@@ -14,7 +14,7 @@
 #define DNS_SERVER_PORT 53
 
 // Define buffer sizes and constants
-#define BUFFER_SIZE 200
+#define BUFFER_SIZE 500
 #define DOMAIN_NAME_SIZE 50
 #define CACHE_SIZE 5
 
@@ -57,7 +57,7 @@ void parseResponse(uint32_t* ip_addr, char* response, uint16_t answer_rr_count){
     uint32_t ip;
     uint32_t data_length;
     int count=0;
-    printf("%d %d %d %d\n", response[0], response[1], response[2], response[3]);
+    // printf("%d %d %d %d\n", response[0], response[1], response[2], response[3]);
     // response++;
     for(int i=0; i<answer_rr_count; i++){
         response += 2;
@@ -82,14 +82,14 @@ void parseResponse(uint32_t* ip_addr, char* response, uint16_t answer_rr_count){
             // response++;
             // ip = (ip << 8) | response[0];
 
-            response++;
             ip_addr[count] = ip;
             count++;
+            response += 4;
         }
         else {
             data_length = *response;
-            data_length = (data_length << 8) | *(response + 1);
-            response += data_length;
+            data_length = (data_length << 8) | response[1];
+            response += data_length + 2;
         }
     }
     ip_addr[count] = 0;
@@ -99,7 +99,7 @@ void parseResponse(uint32_t* ip_addr, char* response, uint16_t answer_rr_count){
 struct Node* createNode(char* domain_name, char* response, size_t query_size, uint16_t answer_rr_count) {
     struct Node* newNode = (struct Node*)malloc(sizeof(struct Node));
     newNode->domain_name = strdup(domain_name);
-    printf("qs%ld\n", query_size);
+    // printf("qs%ld\n", query_size);
     parseResponse(newNode->ip_addr, response + query_size, answer_rr_count);
     newNode->response = strdup(response);
     newNode->next = NULL;
@@ -158,8 +158,8 @@ void removeFromTail(struct Cache* cache) {
 void displayIp(struct Node* cacheNode) {
     uint32_t* ip_addr = cacheNode->ip_addr;
     while(*ip_addr != 0){
-        printf("ip%ld\n", *ip_addr);
-        printf("%d.%d.%d.%d\n", (uint8_t)((*ip_addr)>>24), (uint8_t)((*ip_addr)>>16), (uint8_t)((*ip_addr)>>8), (uint8_t)(*ip_addr));
+        // printf("ip%d\n", *ip_addr);
+        printf(">> %d.%d.%d.%d\n", (uint8_t)((*ip_addr)>>24), (uint8_t)((*ip_addr)>>16), (uint8_t)((*ip_addr)>>8), (uint8_t)(*ip_addr));
         ip_addr++;
     }
 }
@@ -369,14 +369,14 @@ int main() {
         // char buff[16];
         // sprintf(buff, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
         // ip_addr = buff;
-        // end_time = clock();
-        // time_taken = ((double)(end_time - start_time) * 1000) / CLOCKS_PER_SEC;
         // printf("IP Address: %s  fetched in %.3f ms\n\n", ip_addr, time_taken);
 
         // Add the result to the cache
         printf("IP Address:\n");
         cacheNode = addToCache(cache, domain_name, buffer, query_size, res_answer_rr_count);
         displayIp(cacheNode);
+        end_time = clock();
+        time_taken = ((double)(end_time - start_time) * 1000) / CLOCKS_PER_SEC;
         printf("fetched in %.3f ms\n\n", time_taken);
     }
 
