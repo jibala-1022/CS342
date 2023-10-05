@@ -9,10 +9,10 @@
 #include <arpa/inet.h>
 
 #define LOOPBACK "127.0.0.1"
-#define PORT 8080
-#define DATA_SIZE 4 * 5
-#define DELAY_PROP_MIN 2
-#define DELAY_PROP_MAX 5
+#define PORT 8088
+#define DATA_SIZE 20
+#define DELAY_PROP_MIN 1
+#define DELAY_PROP_MAX 1
 #define P_LOST 0
 #define P_CORRUPTED 0
 
@@ -22,13 +22,16 @@ struct Packet {
     int checksum;
 } sndpkt, rcvpkt;
 
-int client_socket;
+int client_socket, server_socket;
+struct sockaddr_in server_addr, client_addr;
+socklen_t server_addr_len, client_addr_len;
 static struct timespec start_time = {0}, end_time = {0};
+FILE* fout;
 
 void tick(){
     clock_gettime(CLOCK_MONOTONIC, &end_time);
     int time_elapsed = end_time.tv_sec - start_time.tv_sec;
-    printf(">> %2d: ", time_elapsed);
+    printf(">> %3d: ", time_elapsed);
 }
 
 int isLost(){
@@ -70,7 +73,7 @@ void udt_send(){
             printf("Packet Lost\n");
             return;
         }
-        if (send(client_socket, &sndpkt, sizeof(struct Packet), 0) == -1) {
+        if (sendto(server_socket, &sndpkt, sizeof(struct Packet), 0, (struct sockaddr*)&client_addr, client_addr_len) == -1) {
             perror("Sending failed");
             return;
         }
@@ -81,7 +84,7 @@ void udt_send(){
 
 void rdt_rcv(){
     memset(&rcvpkt, 0, sizeof(struct Packet));
-    if (recv(client_socket, &rcvpkt, sizeof(struct Packet), 0) == -1) {
+    if (recvfrom(server_socket, &rcvpkt, sizeof(struct Packet), 0, (struct sockaddr*)&client_addr, &client_addr_len) == -1) {
         perror("Receiving failed");
         return;
     }
@@ -91,11 +94,7 @@ void rdt_rcv(){
 }
 
 int main() {
-    int server_socket;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t client_addr_len = sizeof(client_addr);
-
-    if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    if ((server_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Socket creation failed");
         return 1;
     }
@@ -104,25 +103,20 @@ int main() {
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = inet_addr(LOOPBACK);
     server_addr.sin_port = htons(PORT);
+    server_addr_len = sizeof(server_addr);
+    client_addr_len = sizeof(client_addr);
 
-    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+    if (bind(server_socket, (struct sockaddr*)&server_addr, server_addr_len) == -1) {
         perror("Binding failed");
         return 1;
     }
 
-    if (listen(server_socket, 1) == -1) {
-        perror("Listening failed");
+    if((fout = fopen("receiver.txt", "w")) == NULL){
+        perror("File opening failed");
         return 1;
     }
 
-    printf("Server listening on port %d...\n", PORT);
-
-    if((client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_len)) == -1){
-        perror("Accepting connection failed");
-        return 1;
-    }
-    printf("Client connected - %s : %d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-
+    char buffer[DATA_SIZE];
     int seq = 0;
     strcpy(sndpkt.data, "ACK");
     sndpkt.checksum = 0;
@@ -130,11 +124,18 @@ int main() {
     rcvpkt.checksum = 0;
 
     clock_gettime(CLOCK_MONOTONIC, &start_time);
+    tick();
+    printf("Server listening on port %d...\n", PORT);
+
     while (1) {
         rdt_rcv();
 
         if(!isCorrupted() && isAck(seq)){
             sndpkt.seq = seq;
+            seq = 1 - seq;
+            // fputs(buffer, fout);
+            fprintf(stdout, "%s ", rcvpkt.data);
+            fprintf(fout, "%s ", rcvpkt.data);
         }
         else{
             sndpkt.seq = 1 - seq;
@@ -142,6 +143,7 @@ int main() {
         udt_send();
     }
 
+    fclose(fout);
     close(client_socket);
     printf("Client closed\n");
     close(server_socket);

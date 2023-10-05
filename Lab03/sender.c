@@ -9,13 +9,13 @@
 #include <arpa/inet.h>
 
 #define LOOPBACK "127.0.0.1"
-#define PORT 8080
-#define DATA_SIZE 4 * 5
-#define DELAY_PROP_MIN 2
-#define DELAY_PROP_MAX 5
+#define PORT 8088
+#define DATA_SIZE 20
+#define DELAY_PROP_MIN 1
+#define DELAY_PROP_MAX 1
 #define P_LOST 0
 #define P_CORRUPTED 0
-#define TIMEOUT 11
+#define TIMEOUT 1000000
 
 struct Packet {
     int seq;
@@ -24,13 +24,16 @@ struct Packet {
 } sndpkt, rcvpkt;
 
 int client_socket;
-static struct timespec start_time = {0}, end_time = {0};
+struct sockaddr_in server_addr;
+socklen_t server_addr_len;
 struct itimerval timer;
+static struct timespec start_time = {0}, end_time = {0};
+FILE* fin;
 
 void tick(){
     clock_gettime(CLOCK_MONOTONIC, &end_time);
     int time_elapsed = end_time.tv_sec - start_time.tv_sec;
-    printf(">> %2d: ", time_elapsed);
+    printf(">> %3d: ", time_elapsed);
 }
 
 int isLost(){
@@ -72,7 +75,7 @@ void udt_send(){
             printf("Packet Lost\n");
             return;
         }
-        if (send(client_socket, &sndpkt, sizeof(struct Packet), 0) == -1) {
+        if (sendto(client_socket, &sndpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
             perror("Sending failed");
             return;
         }
@@ -83,7 +86,7 @@ void udt_send(){
 
 void rdt_rcv(){
     memset(&rcvpkt, 0, sizeof(struct Packet));
-    if (recv(client_socket, &rcvpkt, sizeof(struct Packet), 0) == -1) {
+    if (recvfrom(client_socket, &rcvpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, &server_addr_len) == -1) {
         perror("Receiving failed");
         return;
     }
@@ -127,13 +130,10 @@ void rdt_send(char* buffer, int seq){
             break;
         }
     }
-    strcpy(buffer, rcvpkt.data);
 }
 
 int main() {
-    struct sockaddr_in server_addr;
-
-    if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    if ((client_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Socket creation failed");
         return 1;
     }
@@ -142,36 +142,33 @@ int main() {
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = inet_addr(LOOPBACK);
     server_addr.sin_port = htons(PORT);
+    server_addr_len = sizeof(server_addr);
 
-    if (connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        perror("Connection failed");
+    if((fin = fopen("sender.txt", "r")) == NULL){
+        perror("File opening failed");
         return 1;
     }
 
-    printf("Connected to server...\n");
-        
     char buffer[DATA_SIZE];
     int seq = 0;
 
     clock_gettime(CLOCK_MONOTONIC, &start_time);
-    // while (1) {
-        printf("Enter a message: ");
-        fgets(buffer, DATA_SIZE, stdin);
-        buffer[strlen(buffer) - 1] = 0;
+    tick();
+    printf("Connected to server...\n");
 
+    // while (fgets(buffer, DATA_SIZE, fin)) {
+    while (fscanf(fin, "%s", buffer) != EOF) {
         if (strcmp(buffer, "/exit") == 0) {
             printf("Connection closed by client\n");
-            // break;
+            break;
         }
 
         rdt_send(buffer, seq);
         seq = 1 - seq;
-    // }
+    }
 
-    // Close the client socket
+    fclose(fin);
     close(client_socket);
-
     printf("Client closed\n");
-
     return 0;
 }
