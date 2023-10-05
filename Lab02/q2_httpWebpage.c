@@ -1,4 +1,4 @@
-// gcc httpWebpage.c -o httpWebpage && ./httpWebpage
+// gcc q2_httpWebpage.c -o httpWebpage && ./httpWebpage
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -183,14 +183,14 @@ char* retrieveWebPage(const char* url) {
 void fetchWebPage(const char* url) {
     // Check if the URL starts with "http://"
     if (strncmp(url, "http://", 7) != 0) {
-        fprintf(stderr, "Invalid URL format\n");
+        fprintf(stderr, "Invalid URL format (Include 'http://')\n");
         return;
     }
 
     // Find the first '/' character after "http://"
     const char* pathStart = strchr(url + 7, '/');
     if (pathStart == NULL) {
-        fprintf(stderr, "Invalid URL format\n");
+        fprintf(stderr, "Invalid URL format (Include 'http://')\n");
         return;
     }
 
@@ -225,7 +225,6 @@ void fetchWebPage(const char* url) {
 
     cache = newNode;
     cacheSize++;
-    free(newPage);
 }
 
 // Display cache contents
@@ -245,7 +244,7 @@ int main() {
     initializeCache();
 
     while (1) {
-        printf("Enter URL (or 'exit' to quit): ");
+        printf("Enter URL(e.g., http://quietsilverfreshmelody.neverssl.com/online/) or '/exit' to quit): ");
         fgets(url, sizeof(url), stdin);
 
         // Remove trailing newline
@@ -253,7 +252,7 @@ int main() {
             url[strlen(url) - 1] = '\0';
         }
 
-        if (strcmp(url, "exit") == 0) {
+        if (strcmp(url, "/exit") == 0) {
             break; // Exit the loop and quit the program
         }
 

@@ -1,4 +1,4 @@
-// gcc -pthread server.c -o server && ./server <server_port>
+// gcc -pthread q3_server.c -o server && ./server <server_port>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

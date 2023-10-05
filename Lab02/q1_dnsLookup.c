@@ -1,4 +1,4 @@
-// gcc dnsLookup.c -o dnsLookup && ./dnsLookup
+// gcc q1_dnsLookup.c -o dnsLookup && ./dnsLookup
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,13 +8,14 @@
 #include <limits.h>
 
 // DNS server IP address and port
-#define DNS_SERVER_IP_ADDR "8.8.8.8"
+// #define DNS_SERVER_IP_ADDR "8.8.8.8"
+#define DNS_SERVER_IP_ADDR "172.17.1.1"
 #define DNS_SERVER_PORT 53
 
 // Maximum buffer size, maximum domain name size, and cache size
 #define BUFFER_SIZE 500
 #define DOMAIN_NAME_SIZE 50
-#define CACHE_SIZE 5
+#define CACHE_SIZE 2
 
 // Function to print debugging messages if DEBUG is defined
 void debug(char* message){

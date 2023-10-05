@@ -1,4 +1,4 @@
-// gcc -pthread client.c -o client && ./client <server_ip_addr> <server_port>
+// gcc -pthread q3_client.c -o client && ./client <server_ip_addr> <server_port>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +29,7 @@ void* receive(void* args) {
     int bytes_received;
 
     while (1) {
-        // Clear the buffer
+        // Clear the buffer+
         memset(buffer, 0, BUFFER_SIZE);
         
         // Receive a message from the server
@@ -51,7 +51,6 @@ void* receive(void* args) {
             printf("Invalid recipient\n");
         } else if (buffer[0] == '3') {
             printf("%s\n", buffer + 1); // Print the message (excluding the type code)
-            fflush(stdin);
         } else {
             printf("Garbage message\n");
         }
@@ -141,7 +140,7 @@ int main(int argc, char* argv[]) {
 
         // Check the response from the server
         if (buffer[0] == '0') {
-            printf("Joined the chat\n");
+            printf("Joined the chat\n- Use '@<username>' to send private message\n- Use '/broadcast' to broadcast to all users\n- Use '/exit' to quit\n");
             logged = 1;
             break;
         } else {
