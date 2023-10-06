@@ -5,9 +5,9 @@
 
 using namespace std;
 
-#define SAMPLE_TIME 10
+#define SAMPLE_TIME 1000
 #define NUM_NODES 5
-#define MAX_BACKOFF 2
+#define MAX_BACKOFF 5
 #define MAX_TRANSMISSION_ATTEMPTS 1
 #define IDLE 0
 #define BUSY 1
@@ -45,8 +45,8 @@ public:
     bool isCollided() { return collided; }
     void resetBackoff() { backoff = 0; }
     void setBinExpBackoff() {
-        int N = MAX_BACKOFF;
-        // int N = (transmission_attempts < MAX_BACKOFF) ? transmission_attempts : MAX_BACKOFF;
+        // int N = MAX_BACKOFF;
+        int N = (transmission_attempts < MAX_BACKOFF) ? transmission_attempts : MAX_BACKOFF;
         backoff = rand() % (1 << N);
     }
     void setDifs() { difs = DIFS; }
@@ -59,7 +59,7 @@ public:
         cout << "Node " << id << " started transmitting." << endl;
         in_transmission = true;
         transmitting_nodes.push_back(this);
-        difs--;
+        if(difs > 0) difs--;
         transmitting_frame = frame;
     }
     bool transmitting() {
@@ -71,16 +71,8 @@ public:
             difs--;
             return false;
         }
+        return false;
     }
-
-    // bool isChannelClear(vector<Node>& nodes) {
-    //     for (Node& node : nodes) {
-    //         if (node.id != id && node.backoff == 0) {
-    //             return false;
-    //         }
-    //     }
-    //     return true;
-    // }
 
     void attemptTransmission() {
         if(in_transmission){
@@ -121,29 +113,11 @@ public:
             }
         }
 
-        // if (backoff == 0) {
-        //     if (isChannelIdle()) {
-        //         if(difs == 0) {
-        //             cout << "Node " << id << " started transmitting." << endl;
-        //             transmitting_nodes.push_back(this);
-        //         }
-        //         else {
-        //             difs--;
-        //         }
-        //     }
-        //     else {
-        //         collisions++;
-        //         setBinExpBackoff();
-        //         cout << "Node " << id << " collided. Retrying after backoff: " << backoff << endl;
-        //     }
-        // }
-        // else if(isChannelIdle()) {
-        //     backoff--;
-        // }
     }
 
     void acked(bool collided_transmission) {
         if(collided_transmission){
+            transmission_attempts++;
             collisions++;
             total_collisions++;
             collided = false;
@@ -167,30 +141,20 @@ public:
 void linkTransmission() {
     bool done;
     int num_nodes = transmitting_nodes.size();
-    // for(auto node = transmitting_nodes.begin(); node != transmitting_nodes.end(); ){
-    //     auto next_node = node + 1;
-    //     done = (*node)->transmitting();
-    //     (*node)->collided();
-    //     if(done){
-    //         if((*node)->isCollided())
-    //         transmitting_nodes.erase(node);
-    //     }
-    //     node = next_node;
-    // }
 
     vector<Node*> unfinished_nodes;
     for(Node* node : transmitting_nodes){
-            channel_status = BUSY;
-            done = node->transmitting();
-            if(num_nodes > 1){
-                node->setCollided();
-            }
-            if(done){
-                node->acked(node->isCollided());
-            }
-            else{
-                unfinished_nodes.push_back(node);
-            }
+        channel_status = BUSY;
+        done = node->transmitting();
+        if(num_nodes > 1){
+            node->setCollided();
+        }
+        if(done){
+            node->acked(node->isCollided());
+        }
+        else{
+            unfinished_nodes.push_back(node);
+        }
     }
     transmitting_nodes = unfinished_nodes;
     if(unfinished_nodes.size() == 0){
@@ -198,33 +162,35 @@ void linkTransmission() {
     }
 }
 
-void update(vector<Node>& nodes){
-    for(Node node : nodes){
-        node.attemptTransmission();
+void update(vector<Node*>& nodes){
+    for(Node* node : nodes){
+        node->attemptTransmission();
     }
 
     linkTransmission();
 }
 
-void displayStatistics(vector<Node>& nodes){
+void displayStatistics(){
     cout << "\nSimulation Results:" << endl;
     cout << "Total Successful Transmissions: " << total_transmissions << endl;
     cout << "Total Collisions: " << total_collisions << endl;
 }
 
 int main() {
-    // srand(static_cast<unsigned>(time(nullptr)));
+    srand(static_cast<unsigned>(time(nullptr)));
 
-    vector<Node> nodes;
-    for (int i = 0; i < NUM_NODES; i++)
-        nodes.push_back(Node(i + 1));
+    vector<Node*> nodes;
+    for (int i = 0; i < NUM_NODES; i++){
+        Node* newNode = new Node(i + 1);
+        nodes.push_back(newNode);
+    }
 
     for(int i=0; i < SAMPLE_TIME; i++){
         cout << ">> " << i + 1 << endl;
         update(nodes);
     }
 
-    displayStatistics(nodes);
+    displayStatistics();
 
     return 0;
 }
