@@ -70,6 +70,9 @@ void udt_send(){
             exit(1);
         }
         printf("Packet reached\n");
+        close(client_socket);
+        close(server_socket);
+        fclose(fout);
         exit(0);
     }
 }
