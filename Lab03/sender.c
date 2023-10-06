@@ -9,7 +9,7 @@
 #include <arpa/inet.h>
 
 #define LOOPBACK "127.0.0.1"
-#define PORT 8088
+#define PORT 8080
 #define DATA_SIZE 20
 #define DELAY_PROP_MIN 1
 #define DELAY_PROP_MAX 1
@@ -27,7 +27,7 @@ int client_socket;
 struct sockaddr_in server_addr;
 socklen_t server_addr_len;
 struct itimerval timer;
-static struct timespec start_time = {0}, end_time = {0};
+struct timespec start_time = {0}, end_time = {0};
 FILE* fin;
 
 void tick(){
@@ -36,17 +36,9 @@ void tick(){
     printf(">> %3d: ", time_elapsed);
 }
 
-int isLost(){
-    return rand() % 100 < P_LOST * 100;
-}
-
-int isCorrupted(){
-    return rand() % 100 < P_CORRUPTED * 100;
-}
-
-int isAck(int seq){
-    return rcvpkt.seq == seq;
-}
+int isLost(){ return rand() % 100 < P_LOST * 100; }
+int isCorrupted(){ return rand() % 100 < P_CORRUPTED * 100; }
+int isAck(int seq){ return rcvpkt.seq == seq; }
 
 void print_pkt(struct Packet* packet){
     printf("\tSEQ = %d\n", packet->seq);
@@ -63,7 +55,7 @@ void udt_send(){
     
     if((pid = fork()) == -1){
         perror("Process creation failed");
-        return;
+        exit(1);
     }
     else if(pid == 0){
         int delay_seconds = DELAY_PROP_MIN + rand() % (DELAY_PROP_MAX - DELAY_PROP_MIN + 1);
@@ -73,22 +65,24 @@ void udt_send(){
 
         if(isLost()){
             printf("Packet Lost\n");
-            return;
+            // exit(0);
         }
-        if (sendto(client_socket, &sndpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+        else if (sendto(client_socket, (void*)&sndpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
             perror("Sending failed");
-            return;
+            // exit(1);
         }
-        printf("Packet reached\n");
-        exit(0);
+        else printf("Packet reached\n");
+        // exit(0);
+        kill(getpid(), SIGKILL);
     }
 }
 
 void rdt_rcv(){
     memset(&rcvpkt, 0, sizeof(struct Packet));
-    if (recvfrom(client_socket, &rcvpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, &server_addr_len) == -1) {
+    int bytes_received;
+    if ((bytes_received = recvfrom(client_socket, (void*)&rcvpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, &server_addr_len)) == -1) {
         perror("Receiving failed");
-        return;
+        exit(1);
     }
     tick();
     printf("Packet received\n");
@@ -96,21 +90,21 @@ void rdt_rcv(){
 }
 
 void rdt_send(char* buffer, int seq){
-    struct sigaction sa;
-    sa.sa_handler = udt_send;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGALRM, &sa, NULL);
+    // struct sigaction sa;
+    // sa.sa_handler = udt_send;
+    // sa.sa_flags = 0;
+    // sigemptyset(&sa.sa_mask);
+    // sigaction(SIGALRM, &sa, NULL);
 
-    timer.it_value.tv_sec = TIMEOUT;
-    timer.it_value.tv_usec = 0;
-    timer.it_interval.tv_sec = TIMEOUT;
-    timer.it_interval.tv_usec = 0;
+    // timer.it_value.tv_sec = TIMEOUT;
+    // timer.it_value.tv_usec = 0;
+    // timer.it_interval.tv_sec = TIMEOUT;
+    // timer.it_interval.tv_usec = 0;
 
-    if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
-        perror("setitimer");
-        return;
-    }
+    // if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
+    //     perror("setitimer");
+    //     exit(1);
+    // }
 
     int checksum = 0;
     sndpkt.seq = seq;
@@ -135,7 +129,7 @@ void rdt_send(char* buffer, int seq){
 int main() {
     if ((client_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Socket creation failed");
-        return 1;
+        exit(1);
     }
 
     memset(&server_addr, 0, sizeof(server_addr));
@@ -146,7 +140,7 @@ int main() {
 
     if((fin = fopen("sender.txt", "r")) == NULL){
         perror("File opening failed");
-        return 1;
+        exit(1);
     }
 
     char buffer[DATA_SIZE];
@@ -157,12 +151,9 @@ int main() {
     printf("Connected to server...\n");
 
     // while (fgets(buffer, DATA_SIZE, fin)) {
-    while (fscanf(fin, "%s", buffer) != EOF) {
-        if (strcmp(buffer, "/exit") == 0) {
-            printf("Connection closed by client\n");
-            break;
-        }
-
+    int itemsRead;
+    while ((itemsRead = fscanf(fin, "%s", buffer)) == 1) {
+        printf("%d\n", itemsRead);
         rdt_send(buffer, seq);
         seq = 1 - seq;
     }

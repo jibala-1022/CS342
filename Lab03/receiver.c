@@ -9,7 +9,7 @@
 #include <arpa/inet.h>
 
 #define LOOPBACK "127.0.0.1"
-#define PORT 8088
+#define PORT 8080
 #define DATA_SIZE 20
 #define DELAY_PROP_MIN 1
 #define DELAY_PROP_MAX 1
@@ -25,7 +25,7 @@ struct Packet {
 int client_socket, server_socket;
 struct sockaddr_in server_addr, client_addr;
 socklen_t server_addr_len, client_addr_len;
-static struct timespec start_time = {0}, end_time = {0};
+struct timespec start_time = {0}, end_time = {0};
 FILE* fout;
 
 void tick(){
@@ -34,17 +34,9 @@ void tick(){
     printf(">> %3d: ", time_elapsed);
 }
 
-int isLost(){
-    return rand() % 100 < P_LOST * 100;
-}
-
-int isCorrupted(){
-    return rand() % 100 < P_CORRUPTED * 100;
-}
-
-int isAck(int seq){
-    return rcvpkt.seq == seq;
-}
+int isLost(){ return rand() % 100 < P_LOST * 100; }
+int isCorrupted(){ return rand() % 100 < P_CORRUPTED * 100; }
+int isAck(int seq){ return rcvpkt.seq == seq; }
 
 void print_pkt(struct Packet* packet){
     printf("\tSEQ = %d\n", packet->seq);
@@ -61,7 +53,7 @@ void udt_send(){
     
     if((pid = fork()) == -1){
         perror("Process creation failed");
-        return;
+        exit(1);
     }
     else if(pid == 0){
         int delay_seconds = DELAY_PROP_MIN + rand() % (DELAY_PROP_MAX - DELAY_PROP_MIN + 1);
@@ -71,11 +63,11 @@ void udt_send(){
 
         if(isLost()){
             printf("Packet Lost\n");
-            return;
+            exit(0);
         }
         if (sendto(server_socket, &sndpkt, sizeof(struct Packet), 0, (struct sockaddr*)&client_addr, client_addr_len) == -1) {
             perror("Sending failed");
-            return;
+            exit(1);
         }
         printf("Packet reached\n");
         exit(0);
@@ -84,22 +76,25 @@ void udt_send(){
 
 void rdt_rcv(){
     memset(&rcvpkt, 0, sizeof(struct Packet));
-    if (recvfrom(server_socket, &rcvpkt, sizeof(struct Packet), 0, (struct sockaddr*)&client_addr, &client_addr_len) == -1) {
+    int bytes_received;
+    if ((bytes_received = recvfrom(server_socket, &rcvpkt, sizeof(struct Packet), 0, (struct sockaddr*)&client_addr, &client_addr_len)) == -1) {
         perror("Receiving failed");
-        return;
+        exit(1);
     }
     tick();
     printf("Packet received\n");
     print_pkt(&rcvpkt);
-}
+}   
+
 
 int main() {
     if ((server_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("Socket creation failed");
-        return 1;
+        exit(1);
     }
 
     memset(&server_addr, 0, sizeof(server_addr));
+    memset(&client_addr, 0, sizeof(client_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = inet_addr(LOOPBACK);
     server_addr.sin_port = htons(PORT);
@@ -108,15 +103,14 @@ int main() {
 
     if (bind(server_socket, (struct sockaddr*)&server_addr, server_addr_len) == -1) {
         perror("Binding failed");
-        return 1;
+        exit(1);
     }
 
     if((fout = fopen("receiver.txt", "w")) == NULL){
         perror("File opening failed");
-        return 1;
+        exit(1);
     }
 
-    char buffer[DATA_SIZE];
     int seq = 0;
     strcpy(sndpkt.data, "ACK");
     sndpkt.checksum = 0;
@@ -133,9 +127,10 @@ int main() {
         if(!isCorrupted() && isAck(seq)){
             sndpkt.seq = seq;
             seq = 1 - seq;
-            // fputs(buffer, fout);
-            fprintf(stdout, "%s ", rcvpkt.data);
+            // fputs(rcvpkt.data, fout);
+            fprintf(stdout, "%s %ld ", rcvpkt.data, strlen(rcvpkt.data));
             fprintf(fout, "%s ", rcvpkt.data);
+            fflush(fout);
         }
         else{
             sndpkt.seq = 1 - seq;
