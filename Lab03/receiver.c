@@ -63,10 +63,16 @@ void udt_send(){
 
         if(isLost()){
             printf("Packet Lost\n");
+            close(client_socket);
+            close(server_socket);
+            fclose(fout);
             exit(0);
         }
         if (sendto(server_socket, &sndpkt, sizeof(struct Packet), 0, (struct sockaddr*)&client_addr, client_addr_len) == -1) {
             perror("Sending failed");
+            close(client_socket);
+            close(server_socket);
+            fclose(fout);
             exit(1);
         }
         printf("Packet reached\n");

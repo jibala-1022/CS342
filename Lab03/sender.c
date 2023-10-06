@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <time.h>
+#include <errno.h>
 #include <pthread.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
@@ -13,9 +14,9 @@
 #define DATA_SIZE 20
 #define DELAY_PROP_MIN 1
 #define DELAY_PROP_MAX 1
-#define P_LOST 0
+#define P_LOST 0.5
 #define P_CORRUPTED 0
-#define TIMEOUT 1000000
+#define TIMEOUT 5
 
 struct Packet {
     int seq;
@@ -65,13 +66,17 @@ void udt_send(){
 
         if(isLost()){
             printf("Packet Lost\n");
+            close(client_socket);
+            fclose(fin);
             exit(0);
         }
-        else if (sendto(client_socket, (void*)&sndpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+        if (sendto(client_socket, &sndpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
             perror("Sending failed");
+            close(client_socket);
+            fclose(fin);
             exit(1);
         }
-        else printf("Packet reached\n");
+        printf("Packet reached\n");
         close(client_socket);
         fclose(fin);
         exit(0);
@@ -81,9 +86,19 @@ void udt_send(){
 void rdt_rcv(){
     memset(&rcvpkt, 0, sizeof(struct Packet));
     int bytes_received;
-    if ((bytes_received = recvfrom(client_socket, (void*)&rcvpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, &server_addr_len)) == -1) {
-        perror("Receiving failed");
-        exit(1);
+    while(1){
+        bytes_received = recvfrom(client_socket, (void*)&rcvpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, &server_addr_len);
+        if(bytes_received == -1) {
+            if(errno == EINTR){
+                printf("interrupted\n");
+                continue;
+            }
+            else{
+                perror("Receiving failed");
+                exit(1);
+            }
+        }
+        break;
     }
     tick();
     printf("Packet received\n");
@@ -91,21 +106,24 @@ void rdt_rcv(){
 }
 
 void rdt_send(char* buffer, int seq){
-    // struct sigaction sa;
-    // sa.sa_handler = udt_send;
-    // sa.sa_flags = 0;
-    // sigemptyset(&sa.sa_mask);
-    // sigaction(SIGALRM, &sa, NULL);
+    struct sigaction sa;
+    sa.sa_handler = udt_send;
+    sa.sa_flags = 0;    
+    sigemptyset(&sa.sa_mask);
+    if(sigaction(SIGALRM, &sa, NULL) == -1){
+        perror("sigaction");
+        exit(1);
+    }
 
-    // timer.it_value.tv_sec = TIMEOUT;
-    // timer.it_value.tv_usec = 0;
-    // timer.it_interval.tv_sec = TIMEOUT;
-    // timer.it_interval.tv_usec = 0;
-
-    // if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
-    //     perror("setitimer");
-    //     exit(1);
-    // }
+    timer.it_value.tv_sec = TIMEOUT;
+    timer.it_value.tv_usec = 0;
+    timer.it_interval.tv_sec = TIMEOUT;
+    timer.it_interval.tv_usec = 0;
+    if (setitimer(ITIMER_REAL, &timer, NULL) == -1) {
+        perror("setitimer");
+        exit(1);
+    }
+    // alarm(TIMEOUT);
 
     int checksum = 0;
     sndpkt.seq = seq;
@@ -114,7 +132,6 @@ void rdt_send(char* buffer, int seq){
     
     while(1){
         udt_send();
-
         rdt_rcv();
         if(isCorrupted()){
             printf("Corrupted\n");
