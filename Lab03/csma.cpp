@@ -5,15 +5,15 @@
 
 using namespace std;
 
-#define SAMPLE_TIME 10000
+#define SAMPLE_TIME 100000
 #define NUM_NODES 5
 #define MAX_BACKOFF 5
-#define MAX_TRANSMISSION_ATTEMPTS 1
+#define MAX_TRANSMISSION_ATTEMPTS 8
 #define IDLE 0
 #define BUSY 1
-#define DIFS 0
-#define MIN_FRAME_SIZE 1
-#define MAX_FRAME_SIZE 1
+#define DIFS 1
+#define MIN_FRAME_SIZE 2
+#define MAX_FRAME_SIZE 2
 
 int channel_status = IDLE;
 
@@ -54,12 +54,10 @@ public:
     void setFrame() { frame = MIN_FRAME_SIZE + rand() % (MAX_FRAME_SIZE - MIN_FRAME_SIZE + 1); }
     bool isChannelIdle() { return channel_status == IDLE; }
     bool canTransmit() { return backoff == 0; }
-    // bool canTransmit() { return transmission_attempts < MAX_TRANSMISSION_ATTEMPTS; }
     void transmit() {
         cout << "Node " << id << " started transmitting." << endl;
         in_transmission = true;
         transmitting_nodes.push_back(this);
-        // if(difs > 0) difs--;
         transmitting_frame = frame;
     }
     bool transmitting() {
@@ -116,8 +114,8 @@ public:
     }
 
     void acked(bool collided_transmission) {
-        if(collided_transmission){
-            transmission_attempts++;
+        transmission_attempts++;
+        if(collided_transmission && transmission_attempts < MAX_TRANSMISSION_ATTEMPTS){
             collisions++;
             setBinExpBackoff();
             cout << "Node " << id << " collided during transmission. Retrying after backoff: " << backoff << endl;
@@ -129,6 +127,7 @@ public:
             resetBackoff();
             cout << "Node " << id << " successfully transmitted." << endl;
         }
+        setDifs();
         collided = false;
         in_transmission = false;
     }
