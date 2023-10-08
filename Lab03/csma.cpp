@@ -12,13 +12,17 @@ using namespace std;
 #define IDLE 0
 #define BUSY 1
 #define DIFS 1
-#define MIN_FRAME_SIZE 2
-#define MAX_FRAME_SIZE 4
+#define FRAME_SIZE_MIN 2
+#define FRAME_SIZE_MAX 4
 
 int channel_status = IDLE;
 
 class Node;
 vector<Node*> transmitting_nodes;
+
+int randint(int lower_bound, int upper_bound){
+    return lower_bound + (double)rand() / RAND_MAX * (upper_bound - lower_bound + 1);
+}
 
 class Node {
 private:
@@ -35,7 +39,7 @@ private:
     int successful_transmissions;
 public:
     Node(int id) : id(id), backoff(0), collisions(0), successful_transmissions(0), transmission_attempts(0), dropped_packets(0), in_transmission(false), difs(DIFS) {
-        frame = MIN_FRAME_SIZE + rand() % (MAX_FRAME_SIZE - MIN_FRAME_SIZE + 1);
+        frame = FRAME_SIZE_MIN + (double)rand() / RAND_MAX * (FRAME_SIZE_MAX - FRAME_SIZE_MIN + 1);
         transmitting_frame = frame;
     }
     int getId() { return id; }
@@ -47,11 +51,11 @@ public:
     void resetBackoff() { backoff = 0; }
     void setBinExpBackoff() {
         int N = (transmission_attempts < MAX_BACKOFF) ? transmission_attempts : MAX_BACKOFF;
-        backoff = rand() % (1 << N);
+        backoff = (double)rand() / RAND_MAX * (1 << N);
     }
     void setDifs() { difs = DIFS; }
     void setCollided() { collided = true; }
-    void setFrame() { frame = MIN_FRAME_SIZE + rand() % (MAX_FRAME_SIZE - MIN_FRAME_SIZE + 1); }
+    void setFrame() { frame = FRAME_SIZE_MIN + (double)rand() / RAND_MAX * (FRAME_SIZE_MAX - FRAME_SIZE_MIN + 1); }
     bool isChannelIdle() { return channel_status == IDLE; }
     bool canTransmit() { return backoff == 0; }
     void transmit() {

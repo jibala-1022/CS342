@@ -37,8 +37,8 @@ void tick(){
     printf(">> %3d: ", time_elapsed);
 }
 
-int isLost(){ return rand() % 100 < P_LOST * 100; }
-int isCorrupted(){ return rand() % 100 < P_CORRUPTED * 100; }
+int isLost(){ return rand() / RAND_MAX < P_LOST; }
+int isCorrupted(){ return rand() / RAND_MAX < P_CORRUPTED; }
 int isAck(int seq){ return rcvpkt.seq == seq; }
 
 void print_pkt(struct Packet* packet){
@@ -59,7 +59,7 @@ void udt_send(){
         exit(1);
     }
     else if(pid == 0){
-        int delay_seconds = DELAY_PROP_MIN + rand() % (DELAY_PROP_MAX - DELAY_PROP_MIN + 1);
+        int delay_seconds = DELAY_PROP_MIN + (double)rand() / RAND_MAX * (DELAY_PROP_MAX - DELAY_PROP_MIN + 1);
         printf("Prop delay %ds\n", delay_seconds);
         sleep(delay_seconds);
         tick();
