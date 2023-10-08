@@ -13,7 +13,7 @@ using namespace std;
 #define BUSY 1
 #define DIFS 1
 #define MIN_FRAME_SIZE 2
-#define MAX_FRAME_SIZE 2
+#define MAX_FRAME_SIZE 4
 
 int channel_status = IDLE;
 
@@ -55,10 +55,10 @@ public:
     bool isChannelIdle() { return channel_status == IDLE; }
     bool canTransmit() { return backoff == 0; }
     void transmit() {
-        cout << "Node " << id << " started transmitting." << endl;
         in_transmission = true;
-        transmitting_nodes.push_back(this);
         transmitting_frame = frame;
+        cout << "Node " << id << " started transmitting. Packet size: " << transmitting_frame << endl;
+        transmitting_nodes.push_back(this);
     }
     bool transmitting() {
         if(difs == 0){
