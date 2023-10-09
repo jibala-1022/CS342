@@ -12,17 +12,12 @@ using namespace std;
 #define IDLE 0
 #define BUSY 1
 #define DIFS 1
-#define FRAME_SIZE_MIN 2
-#define FRAME_SIZE_MAX 4
+#define FRAME_SIZE 4
 
 int channel_status = IDLE;
 
 class Node;
 vector<Node*> transmitting_nodes;
-
-int randint(int lower_bound, int upper_bound){
-    return lower_bound + (double)rand() / RAND_MAX * (upper_bound - lower_bound + 1);
-}
 
 class Node {
 private:
@@ -38,24 +33,23 @@ private:
     int collisions;
     int successful_transmissions;
 public:
-    Node(int id) : id(id), backoff(0), collisions(0), successful_transmissions(0), transmission_attempts(0), dropped_packets(0), in_transmission(false), difs(DIFS) {
-        frame = FRAME_SIZE_MIN + (double)rand() / RAND_MAX * (FRAME_SIZE_MAX - FRAME_SIZE_MIN + 1);
-        transmitting_frame = frame;
-    }
+    Node(int id) : id(id), backoff(0), collisions(0), successful_transmissions(0), transmission_attempts(0), dropped_packets(0), in_transmission(false), difs(DIFS), frame(FRAME_SIZE) {}
     int getId() { return id; }
-    int getCollisions() { return collisions; }
     int getTransmissionAttempts() { return transmission_attempts; }
-    int getTotalTransmissions() { return successful_transmissions; }
+    int getCollisions() { return collisions; }
+    int getSuccessfulTransmissions() { return successful_transmissions; }
+    int getDroppedPackets() { return dropped_packets; }
 
     bool isCollided() { return collided; }
     void resetBackoff() { backoff = 0; }
     void setBinExpBackoff() {
         int N = (transmission_attempts < MAX_BACKOFF) ? transmission_attempts : MAX_BACKOFF;
-        backoff = (double)rand() / RAND_MAX * (1 << N);
+        int K = (double)rand() / RAND_MAX * (1 << N);
+        backoff = K * FRAME_SIZE;
     }
     void setDifs() { difs = DIFS; }
     void setCollided() { collided = true; }
-    void setFrame() { frame = FRAME_SIZE_MIN + (double)rand() / RAND_MAX * (FRAME_SIZE_MAX - FRAME_SIZE_MIN + 1); }
+    void setFrame() { frame = FRAME_SIZE; }
     bool isChannelIdle() { return channel_status == IDLE; }
     bool canTransmit() { return backoff == 0; }
     void transmit() {
@@ -119,10 +113,19 @@ public:
 
     void acked(bool collided_transmission) {
         transmission_attempts++;
-        if(collided_transmission && transmission_attempts < MAX_TRANSMISSION_ATTEMPTS){
+        if(collided_transmission){
             collisions++;
-            setBinExpBackoff();
-            cout << "Node " << id << " collided during transmission. Retrying after backoff: " << backoff << endl;
+            if(transmission_attempts < MAX_TRANSMISSION_ATTEMPTS){
+                setBinExpBackoff();
+                cout << "Node " << id << " collided during transmission. Retrying after backoff: " << backoff << endl;
+            }
+            else{
+                dropped_packets++;
+                cout << "Node " << id << " collided during transmission. Packet dropped" << endl;
+                transmission_attempts = 0;
+                setFrame();
+                resetBackoff();
+            }
         }
         else{
             transmission_attempts = 0;
@@ -173,8 +176,9 @@ void displayStatistics(vector<Node*>& nodes){
     cout << "\nSimulation Results:" << endl;
     for(Node* node : nodes){
         cout << "Node " << node->getId() << endl;
-        cout << "Total Successful Transmissions: " << node->getTotalTransmissions() << endl;
-        cout << "Total Collisions: " << node->getCollisions() << endl;
+        cout << "Successful Transmissions: " << node->getSuccessfulTransmissions() << endl;
+        cout << "Collisions: " << node->getCollisions() << endl;
+        cout << "Dropped Packets: " << node->getDroppedPackets() << endl;
     }
 }
 
