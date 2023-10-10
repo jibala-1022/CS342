@@ -140,6 +140,14 @@ void update(){
 void displayStatistics(){
     std::cout << std::endl << std::right;
     std::cout << UNDERLINE << "Simulation Results" << NORMAL << std::endl;
+    std::cout << "Sample Time: " << SAMPLE_TIME <<std::endl;
+    std::cout << "Frame Size: ";
+    if(FRAME_SIZE_MIN == FRAME_SIZE_MAX){
+        std::cout << FRAME_SIZE_MIN << std::endl;
+    }
+    else{
+        std::cout << FRAME_SIZE_MIN << " - " << FRAME_SIZE_MAX << std::endl;
+    }
 
     std::cout << HEADING << " Node ID                   | ";
     for(Node* node : nodes){
