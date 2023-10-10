@@ -7,6 +7,9 @@
 
 #define NORMAL "\033[0m"
 #define INVERT "\033[30;47m"
+#define HEADING "\033[1;100m"
+#define RED "\033[91m"
+#define GREEN "\033[92m"
 #define UNDERLINE "\033[4m"
 
 class Router {
@@ -19,7 +22,7 @@ public:
     void add_neighbour(Router* neighbour, int link_cost);
     Router* print_routing_table(int dest_rid);
     void update_routing_table();
-    friend void traceroute(Router* src, Router* dest);
+    void traceroute(Router* dest);
 };
 
 void Router::add_neighbour(Router* neighbour, int link_cost){
@@ -29,7 +32,7 @@ void Router::add_neighbour(Router* neighbour, int link_cost){
 
 Router* Router::print_routing_table(int dest_rid = (int)NULL){
     Router* next_hop_router = nullptr;
-    std::cout << UNDERLINE << " Routing Table - Router " << std::left << std::setw(4) << router_id << NORMAL << "\n";
+    std::cout << HEADING << " Routing Table - Router " << std::left << std::setw(4) << router_id << NORMAL << "\n";
     std::cout << "  Destination  |  NextHop  \n";
     for(auto entry : routing_table){
         int destination_rid = entry.first;
@@ -87,25 +90,25 @@ void Router::update_routing_table(){
     }
 }
 
-void traceroute(Router* src, Router* dest){
-    Router* router = src;
-    int curr_rid = router->router_id;
+void Router::traceroute(Router* dest){
+    Router* curr_router = this;
+    int curr_rid = this->router_id;
     int dest_rid = dest->router_id;
     std::cout << "Calculating Route from Router " << curr_rid << " to Router " << dest_rid << "...  ";
-    if(src->routing_table.find(dest_rid) == src->routing_table.end()){
-        std::cout << "Not Reachable\n\n";
+    if(curr_router->routing_table.find(dest_rid) == curr_router->routing_table.end()){
+        std::cout << RED << "Not Reachable\n\n" << NORMAL;
         return;
     }
     if(curr_rid == dest_rid){
-        std::cout << "Localhost\n\n";
+        std::cout << GREEN << "Localhost\n\n" << NORMAL;
         return;
     }
     std::cout << "\n\n";
     std::vector<int> path;
     while(curr_rid != dest_rid){
         path.push_back(curr_rid);
-        router = router->print_routing_table(dest_rid);
-        curr_rid = router->router_id;
+        curr_router = curr_router->print_routing_table(dest_rid);
+        curr_rid = curr_router->router_id;
     }
     std::cout << "OSPF Route: ";
     for(int rid : path){
@@ -136,8 +139,9 @@ int main() {
     r5.update_routing_table();
     r6.update_routing_table();
 
-    traceroute(&r3, &r4);
-    traceroute(&r1, &r1);
+    r3.traceroute(&r4);
+    r1.traceroute(&r1);
+    r1.traceroute(&r6);
 
     return 0;
 }
