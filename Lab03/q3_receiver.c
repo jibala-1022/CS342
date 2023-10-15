@@ -1,4 +1,4 @@
-// gcc receiver.c -o receiver && ./receiver
+// gcc q3_receiver.c -o q3_receiver && ./q3_receiver
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,10 +14,10 @@
 #define DELAY_PROP_MIN 2
 #define DELAY_PROP_MAX 3
 #define P_CORRUPTED 0.5
-#define MAX_CLIENTS 1
+#define MAX_CLIENTS 2
 
-#define RED 91
-#define GREEN 92
+#define RED    91
+#define GREEN  92
 #define YELLOW 93
 
 struct Packet {

@@ -1,4 +1,4 @@
-// gcc sender.c -o sender && ./sender
+// gcc q3_sender.c -o q3_sender && ./q3_sender
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,8 +15,8 @@
 #define DELAY_PROP_MAX 3
 #define P_CORRUPTED 0.5
 
-#define RED 91
-#define GREEN 92
+#define RED    91
+#define GREEN  92
 #define YELLOW 93
 
 struct Packet {

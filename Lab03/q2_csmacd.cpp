@@ -1,21 +1,21 @@
-// g++ csmacd.cpp -o csmacd && ./csmacd
+// g++ q2_csmacd.cpp -o q2_csmacd && ./q2_csmacd
 #include <iostream>
 #include <iomanip>
 #include <vector>
 #include <random>
 #include <ctime>
 
-#define SAMPLE_TIME 10000
-#define MAX_BACKOFF 5
-#define FRAME_SIZE 4
-
-#define NORMAL "\033[0m"
-#define INVERT "\033[30;47m"
-#define HEADING "\033[1;100m"
-#define RED "\033[91m"
-#define GREEN "\033[92m"
-#define YELLOW "\033[93m"
+#define NORMAL    "\033[0m"
+#define INVERT    "\033[30;47m"
+#define HEADING   "\033[1;100m"
+#define RED       "\033[91m"
+#define GREEN     "\033[92m"
+#define YELLOW    "\033[93m"
 #define UNDERLINE "\033[4m"
+
+static int sample_time;
+static int max_backoff;
+static int frame_size;
 
 class Node;
 enum Status { IDLE, BUSY };
@@ -23,7 +23,6 @@ enum Status { IDLE, BUSY };
 Status channel_status = IDLE;
 std::vector<Node*> nodes;
 std::vector<Node*> transmitting_nodes;
-int wasted_time = 0;
 
 class Node {
 private:
@@ -36,7 +35,7 @@ private:
     int collisions;
     int n_backoffs;
 public:
-    Node(int id) : id(id), backoff(0), transmission_attempts(0), frame(FRAME_SIZE), in_transmission(false), successful_transmissions(0), collisions(0), n_backoffs(0) {}
+    Node(int id) : id(id), backoff(0), transmission_attempts(0), frame(frame_size), in_transmission(false), successful_transmissions(0), collisions(0), n_backoffs(0) {}
     int getId() { return id; }
     int getSuccessfulTransmissions() { return successful_transmissions; }
     int getCollisions() { return collisions; }
@@ -45,10 +44,10 @@ public:
     bool canTransmit() { return backoff == 0; }
     bool isTransmitting() { return in_transmission; }
 
-    void setFrame() { frame = FRAME_SIZE; }
+    void setFrame() { frame = frame_size; }
     void resetBackoff() { backoff = 0; }
     void setBinExpBackoff() {
-        int N = (transmission_attempts < MAX_BACKOFF) ? transmission_attempts : MAX_BACKOFF;
+        int N = (transmission_attempts < max_backoff) ? transmission_attempts : max_backoff;
         int K = (double)rand() / RAND_MAX * (1 << N);
         backoff = K * frame;
     }
@@ -129,16 +128,13 @@ void update(){
             transmitting_nodes.clear();
         }
     }
-    else{
-        wasted_time++;
-    }
 }
 
 void displayStatistics(){
     std::cout << std::endl << std::right;
     std::cout << UNDERLINE << "Simulation Results" << NORMAL << std::endl;
-    std::cout << "Sample Time: " << SAMPLE_TIME <<std::endl;
-    std::cout << "Frame Size: " << FRAME_SIZE << std::endl;
+    std::cout << "Sample Time: " << sample_time <<std::endl;
+    std::cout << "Frame Size: " << frame_size << std::endl;
 
     std::cout << HEADING << " Node ID                   | ";
     for(Node* node : nodes){
@@ -160,7 +156,6 @@ void displayStatistics(){
         std::cout << std::setw(8) << node->getBackoffs() << " | ";
     }
     std::cout << NORMAL << std::endl;
-    std::cout << RED << "Total Wasted Slots: " << wasted_time << NORMAL << std::endl;
     std::cout << std::left << std::endl;
 }
 
@@ -168,15 +163,21 @@ int main() {
     srand(static_cast<unsigned>(time(nullptr)));
     int n_nodes;
     std::cout << HEADING << "  CSMA/CD Simulation  " << NORMAL << std::endl;
-    std::cout << "Enter the number of nodes: ";
+    std::cout << "Enter the number of nodes (eg. 5): ";
     std::cin >> n_nodes;
+    std::cout << "Enter the time of simulation (eg. 100000): ";
+    std::cin >> sample_time;
+    std::cout << "Enter the maximum backoff multiplier (eg. 5): ";
+    std::cin >> max_backoff;
+    std::cout << "Enter the frame size (eg. 4): ";
+    std::cin >> frame_size;
 
     for (int i = 0; i < n_nodes; i++){
         Node* newNode = new Node(i + 1);
         nodes.push_back(newNode);
     }
 
-    for(int i = 0; i < SAMPLE_TIME; i++){
+    for(int i = 0; i < sample_time; i++){
         std::cout << HEADING << " " << i + 1 << " " << NORMAL << std::endl;
         update();
     }

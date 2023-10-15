@@ -1,4 +1,4 @@
-// g++ ospf.cpp -o ospf && ./ospf
+// g++ q1_ospf.cpp -o q1_ospf && ./q1_ospf
 #include <iostream>
 #include <iomanip>
 #include <vector>
