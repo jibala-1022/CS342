@@ -14,14 +14,19 @@
 #define DATA_SIZE 20
 #define DELAY_PROP_MIN 1
 #define DELAY_PROP_MAX 1
-#define P_LOST 0.5
-#define P_CORRUPTED 0
+#define P_LOST 0
+#define P_CORRUPTED 0.5
 #define TIMEOUT 5
+
+#define RED 91
+#define GREEN 92
+#define YELLOW 93
 
 struct Packet {
     int seq;
     char data[DATA_SIZE];
     int checksum;
+    int lost;
 } sndpkt, rcvpkt;
 
 int client_socket;
@@ -34,17 +39,17 @@ FILE* fin;
 void tick(){
     clock_gettime(CLOCK_MONOTONIC, &end_time);
     int time_elapsed = end_time.tv_sec - start_time.tv_sec;
-    printf(">> %3d: ", time_elapsed);
+    printf("\033[1;100m %3d \033[0m\n", time_elapsed);
 }
 
-int isLost(){ return rand() / RAND_MAX < P_LOST; }
-int isCorrupted(){ return rand() / RAND_MAX < P_CORRUPTED; }
+int isLost(){ return (double)rand() / RAND_MAX < P_LOST; }
+int isCorrupted(){ return (double)rand() / RAND_MAX < P_CORRUPTED; }
 int isAck(int seq){ return rcvpkt.seq == seq; }
 
-void print_pkt(struct Packet* packet){
-    printf("\tSEQ = %d\n", packet->seq);
-    printf("\tDATA = %s\n", packet->data);
-    printf("\tCHECKSUM = %d\n", packet->checksum);
+void print_pkt(struct Packet* packet, int color){
+    printf("    \033[%dm SEQ = %d \033[0m\n", color, packet->seq);
+    printf("    \033[%dm DATA = %s \033[0m\n", color, packet->data);
+    printf("    \033[%dm CHECKSUM = %d \033[0m\n", color, packet->checksum);
 }
 
 void udt_send(){
@@ -52,7 +57,7 @@ void udt_send(){
 
     tick();
     printf("Packet sent\n");
-    print_pkt(&sndpkt);
+    print_pkt(&sndpkt, YELLOW);
     
     if((pid = fork()) == -1){
         perror("Process creation failed");
@@ -66,9 +71,10 @@ void udt_send(){
 
         if(isLost()){
             printf("Packet Lost\n");
-            close(client_socket);
-            fclose(fin);
-            exit(0);
+            sndpkt.lost = 1;
+        }
+        else{
+            sndpkt.lost = 0;
         }
         if (sendto(client_socket, &sndpkt, sizeof(struct Packet), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
             perror("Sending failed");
@@ -102,7 +108,6 @@ void rdt_rcv(){
     }
     tick();
     printf("Packet received\n");
-    print_pkt(&rcvpkt);
 }
 
 void rdt_send(char* buffer, int seq){
@@ -133,12 +138,15 @@ void rdt_send(char* buffer, int seq){
     while(1){
         udt_send();
         rdt_rcv();
+        if(rcvpkt.lost) continue;
         if(isCorrupted()){
             printf("Corrupted\n");
+            print_pkt(&rcvpkt, RED);
             continue;
         }
         if(isAck(seq)){
             printf("ACKed\n");
+            print_pkt(&rcvpkt, GREEN);
             break;
         }
     }
@@ -161,17 +169,16 @@ int main() {
         exit(1);
     }
 
+    printf("Connected to server...\n");
+
     char buffer[DATA_SIZE];
     int seq = 0;
 
     clock_gettime(CLOCK_MONOTONIC, &start_time);
-    tick();
-    printf("Connected to server...\n");
+    // tick();
 
-    // while (fgets(buffer, DATA_SIZE, fin)) {
     int itemsRead;
     while ((itemsRead = fscanf(fin, "%s", buffer)) == 1) {
-        printf("%d\n", itemsRead);
         rdt_send(buffer, seq);
         seq = 1 - seq;
     }

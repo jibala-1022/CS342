@@ -5,12 +5,14 @@
 #include <random>
 #include <ctime>
 
-#define SAMPLE_TIME 100000
+#define SAMPLE_TIME 10000
+#define NUM_NODES 5
 #define MAX_BACKOFF 5
-#define FRAME_SIZE_MIN 2
-#define FRAME_SIZE_MAX 4
-#define IDLE true
-#define BUSY false
+#define MAX_TRANSMISSION_ATTEMPTS 8
+#define FRAME_SIZE 4
+#define DIFS 1
+#define SIFS 1
+#define ACK 1
 
 #define NORMAL "\033[0m"
 #define INVERT "\033[30;47m"
@@ -18,76 +20,75 @@
 #define RED "\033[91m"
 #define GREEN "\033[92m"
 #define YELLOW "\033[93m"
+#define BLUE "\033[94m"
 #define UNDERLINE "\033[4m"
 
 class Node;
-bool channel_status = IDLE;
+enum Status { IDLE, BUSY };
+
+Status channel_status = IDLE;
 std::vector<Node*> nodes;
 std::vector<Node*> transmitting_nodes;
-int wasted_slots = 0;
+int wasted_time = 0;
 
 class Node {
 private:
     int id;
     int backoff;
     int transmission_attempts;
+    int difs;
     int frame;
+    int transmitting_frame;
+    bool collided;
     bool in_transmission;
     int successful_transmissions;
     int collisions;
     int n_backoffs;
+    int dropped_packets;
 public:
-    Node(int id) : id(id), backoff(0), transmission_attempts(0), in_transmission(false), successful_transmissions(0), collisions(0), n_backoffs(0) {
-        frame = FRAME_SIZE_MIN + (double)rand() / RAND_MAX * (FRAME_SIZE_MAX - FRAME_SIZE_MIN + 1);
-    }
+    Node(int id) : id(id), backoff(0), collisions(0), successful_transmissions(0), transmission_attempts(0), frame(FRAME_SIZE), dropped_packets(0), n_backoffs(0), in_transmission(false), difs(DIFS) {}
     int getId() { return id; }
+    int getTransmissionAttempts() { return transmission_attempts; }
     int getSuccessfulTransmissions() { return successful_transmissions; }
     int getCollisions() { return collisions; }
     int getBackoffs() { return n_backoffs; }
+    int getDroppedPackets() { return dropped_packets; }
 
-    bool canTransmit() { return backoff == 0; }
-    bool isTransmitting() { return in_transmission; }
-
-    void setFrame() { frame = FRAME_SIZE_MIN + (double)rand() / RAND_MAX * (FRAME_SIZE_MAX - FRAME_SIZE_MIN + 1); }
+    bool isCollided() { return collided; }
     void resetBackoff() { backoff = 0; }
     void setBinExpBackoff() {
         int N = (transmission_attempts < MAX_BACKOFF) ? transmission_attempts : MAX_BACKOFF;
         int K = (double)rand() / RAND_MAX * (1 << N);
         backoff = K * frame;
     }
+    void setDifs() { difs = DIFS; }
+    void setCollided() { collided = true; }
+    void setFrame() { frame = FRAME_SIZE; }
+    bool isChannelIdle() { return channel_status == IDLE; }
+    bool canTransmit() { return backoff == 0; }
 
     void attemptTransmission();
-    void collided();
     void transmit();
     bool transmitting();
+    void ack();
 };
 
-
-void Node::collided(){
-    transmission_attempts++;
-    n_backoffs++;
-    collisions++;
-    setBinExpBackoff();
-    std::cout << RED << "Node " << id << " collided. Retrying after backoff: " << backoff << NORMAL << std::endl;
-}
-
-void Node::transmit(){
+void Node::transmit() {
     in_transmission = true;
-    channel_status = BUSY;
-    std::cout << GREEN << "Node " << id << " is transmitting. Frame size: " << frame << NORMAL << std::endl;
+    transmitting_frame = frame;
+    std::cout << BLUE << "Node " << id << " started transmitting. Packet size: " << transmitting_frame << NORMAL << std::endl;
+    transmitting_frame += SIFS + ACK;
+    transmitting_nodes.push_back(this);
 }
 
-bool Node::transmitting(){
-    frame--;
-    if(frame == 0){
-        resetBackoff();
-        setFrame();
-        in_transmission = false;
-        successful_transmissions++;
-        transmission_attempts = 0;
-        channel_status = IDLE;
-        std::cout << GREEN << "Node " << id << " finished transmitting." << NORMAL << std::endl;
-        return true;
+bool Node::transmitting() {
+    if(difs == 0){
+        transmitting_frame--;
+        return transmitting_frame == 0;
+    }
+    else{
+        difs--;
+        return false;
     }
     return false;
 }
@@ -96,58 +97,101 @@ void Node::attemptTransmission() {
     if(in_transmission){
         return;
     }
-    if(backoff > 0){
-        backoff--;
-        return;
-    }
-    if(channel_status == IDLE){
-        transmitting_nodes.push_back(this);
+    if(isChannelIdle()){
+        if(backoff == 0){
+            if(difs == 0){
+                transmit();
+            }
+            else{
+                difs--;
+            }
+        }
+        else{
+            if(difs == 0){
+                backoff--;
+            }
+            else{
+                difs--;
+            }
+        }
     }
     else{
-        transmission_attempts++;
-        n_backoffs++;
-        setBinExpBackoff();
-        std::cout << YELLOW << "Node " << id << " is ready but channel is busy. Retrying after backoff: " << backoff << NORMAL << std::endl;
+        if(backoff == 0){
+            transmission_attempts++;
+            n_backoffs++;
+            setDifs();
+            setBinExpBackoff();
+            std::cout << YELLOW << "Node " << id << " is ready but channel is busy. Retrying after backoff: " << backoff << NORMAL << std::endl;
+        }
     }
 }
 
+void Node::ack() {
+    transmission_attempts++;
+    if(collided){
+        collisions++;
+        n_backoffs++;
+        if(transmission_attempts < MAX_TRANSMISSION_ATTEMPTS){
+            setBinExpBackoff();
+            std::cout << RED << "Node " << id << " collided during transmission. Attempt: " << transmission_attempts << "/" << MAX_TRANSMISSION_ATTEMPTS << ". Retrying after backoff: " << backoff << NORMAL << std::endl;
+        }
+        else{
+            dropped_packets++;
+            std::cout << RED << "Node " << id << " collided during transmission. Attempt: " << MAX_TRANSMISSION_ATTEMPTS << "/" << MAX_TRANSMISSION_ATTEMPTS << ". Packet dropped" << NORMAL << std::endl;
+            transmission_attempts = 0;
+            setFrame();
+            resetBackoff();
+        }
+    }
+    else{
+        transmission_attempts = 0;
+        successful_transmissions++;
+        setFrame();
+        resetBackoff();
+        std::cout << GREEN << "Node " << id << " successfully transmitted." << NORMAL << std::endl;
+    }
+    setDifs();
+    collided = false;
+    in_transmission = false;
+}
+
+
+void transmission() {
+    std::vector<Node*> unfinished_nodes;
+    for(Node* node : transmitting_nodes){
+        channel_status = BUSY;
+        bool done = node->transmitting();
+        if(transmitting_nodes.size() > 1){
+            node->setCollided();
+        }
+        if(done){
+            node->ack();
+        }
+        else{
+            unfinished_nodes.push_back(node);
+        }
+    }
+    if(channel_status == IDLE){
+        wasted_time++;
+    }
+    transmitting_nodes = unfinished_nodes;
+    if(unfinished_nodes.size() == 0){
+        channel_status = IDLE;
+    }
+}
 
 void update(){
     for(Node* node : nodes){
         node->attemptTransmission();
     }
-    if(transmitting_nodes.size() > 1){
-        for(Node* node : transmitting_nodes){
-            node->collided();
-        }
-        transmitting_nodes.clear();
-    }
-    else if(transmitting_nodes.size() == 1){
-        Node* transmitting_node = transmitting_nodes[0];
-        if(transmitting_node->isTransmitting() == false){
-            transmitting_node->transmit();
-        }
-        bool done = transmitting_node->transmitting();
-        if(done){
-            transmitting_nodes.clear();
-        }
-    }
-    else{
-        wasted_slots++;
-    }
+    transmission();
 }
 
 void displayStatistics(){
     std::cout << std::endl << std::right;
     std::cout << UNDERLINE << "Simulation Results" << NORMAL << std::endl;
     std::cout << "Sample Time: " << SAMPLE_TIME <<std::endl;
-    std::cout << "Frame Size: ";
-    if(FRAME_SIZE_MIN == FRAME_SIZE_MAX){
-        std::cout << FRAME_SIZE_MIN << std::endl;
-    }
-    else{
-        std::cout << FRAME_SIZE_MIN << " - " << FRAME_SIZE_MAX << std::endl;
-    }
+    std::cout << "Frame Size: " << FRAME_SIZE << std::endl;
 
     std::cout << HEADING << " Node ID                   | ";
     for(Node* node : nodes){
@@ -169,23 +213,28 @@ void displayStatistics(){
         std::cout << std::setw(8) << node->getBackoffs() << " | ";
     }
     std::cout << NORMAL << std::endl;
-    std::cout << RED << " Total Wasted Slots: " << wasted_slots << NORMAL << std::endl;
+    std::cout << RED << " Dropped Packets           | ";
+    for(Node* node : nodes){
+        std::cout << std::setw(8) << node->getDroppedPackets() << " | ";
+    }
+    std::cout << NORMAL << std::endl;
+    std::cout << RED << "Total Wasted Slots: " << wasted_time << NORMAL << std::endl;
     std::cout << std::left << std::endl;
 }
 
 int main() {
     srand(static_cast<unsigned>(time(nullptr)));
-    int N;
+    int n_nodes;
     std::cout << HEADING << "  CSMA/CA Simulation  " << NORMAL << std::endl;
     std::cout << "Enter the number of nodes: ";
-    std::cin >> N;
+    std::cin >> n_nodes;
 
-    for (int i = 0; i < N; i++){
+    for (int i = 0; i < n_nodes; i++){
         Node* newNode = new Node(i + 1);
         nodes.push_back(newNode);
     }
 
-    for(int i = 0; i < SAMPLE_TIME; i++){
+    for(int i=0; i < SAMPLE_TIME; i++){
         std::cout << HEADING << " " << i + 1 << " " << NORMAL << std::endl;
         update();
     }

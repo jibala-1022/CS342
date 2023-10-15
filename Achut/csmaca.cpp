@@ -5,16 +5,11 @@
 #include <random>
 #include <ctime>
 
-using namespace std;
-
 #define SAMPLE_TIME 10000
 #define NUM_NODES 5
 #define MAX_BACKOFF 5
 #define MAX_TRANSMISSION_ATTEMPTS 8
-#define FRAME_SIZE_MIN 2
-#define FRAME_SIZE_MAX 4
-#define IDLE 0
-#define BUSY 1
+#define FRAME_SIZE 4
 #define DIFS 1
 #define SIFS 1
 #define ACK 1
@@ -25,20 +20,16 @@ using namespace std;
 #define RED "\033[91m"
 #define GREEN "\033[92m"
 #define YELLOW "\033[93m"
+#define BLUE "\033[94m"
 #define UNDERLINE "\033[4m"
 
 class Node;
+enum Status { IDLE, BUSY };
 
-class Channel {
-private:
-    static int status;
-    static vector<Node*> transmitting_nodes;
-public:
-    static void transmission();
-    friend class Node;
-};
-int Channel::status = IDLE;
-vector<Node*> Channel::transmitting_nodes;
+Status channel_status = IDLE;
+std::vector<Node*> nodes;
+std::vector<Node*> transmitting_nodes;
+int wasted_time = 0;
 
 class Node {
 private:
@@ -55,9 +46,7 @@ private:
     int n_backoffs;
     int dropped_packets;
 public:
-    Node(int id) : id(id), backoff(0), collisions(0), successful_transmissions(0), transmission_attempts(0), dropped_packets(0), n_backoffs(0), in_transmission(false), difs(DIFS) {
-        frame = FRAME_SIZE_MIN + (double)rand() / RAND_MAX * (FRAME_SIZE_MAX - FRAME_SIZE_MIN + 1);
-    }
+    Node(int id) : id(id), backoff(0), collisions(0), successful_transmissions(0), transmission_attempts(0), frame(FRAME_SIZE), dropped_packets(0), n_backoffs(0), in_transmission(false), difs(DIFS) {}
     int getId() { return id; }
     int getTransmissionAttempts() { return transmission_attempts; }
     int getSuccessfulTransmissions() { return successful_transmissions; }
@@ -74,8 +63,8 @@ public:
     }
     void setDifs() { difs = DIFS; }
     void setCollided() { collided = true; }
-    void setFrame() { frame = FRAME_SIZE_MIN + (double)rand() / RAND_MAX * (FRAME_SIZE_MAX - FRAME_SIZE_MIN + 1); }
-    bool isChannelIdle() { return Channel::status == IDLE; }
+    void setFrame() { frame = FRAME_SIZE; }
+    bool isChannelIdle() { return channel_status == IDLE; }
     bool canTransmit() { return backoff == 0; }
 
     void attemptTransmission();
@@ -86,9 +75,10 @@ public:
 
 void Node::transmit() {
     in_transmission = true;
-    transmitting_frame = frame + SIFS + ACK;
-    cout << "Node " << id << " started transmitting. Packet size: " << transmitting_frame << endl;
-    Channel::transmitting_nodes.push_back(this);
+    transmitting_frame = frame;
+    std::cout << BLUE << "Node " << id << " started transmitting. Packet size: " << transmitting_frame << NORMAL << std::endl;
+    transmitting_frame += SIFS + ACK;
+    transmitting_nodes.push_back(this);
 }
 
 bool Node::transmitting() {
@@ -131,16 +121,8 @@ void Node::attemptTransmission() {
             n_backoffs++;
             setDifs();
             setBinExpBackoff();
-            cout << "Node " << id << " collided before transmission. Retrying after backoff: " << backoff << endl;
+            std::cout << YELLOW << "Node " << id << " is ready but channel is busy. Retrying after backoff: " << backoff << NORMAL << std::endl;
         }
-        // else{
-        //     if(difs == 0){
-        //         // do nothing
-        //     }
-        //     else{
-        //         // difs--;
-        //     }
-        // }
     }
 }
 
@@ -148,14 +130,14 @@ void Node::ack() {
     transmission_attempts++;
     if(collided){
         collisions++;
-        // n_backoffs++;
+        n_backoffs++;
         if(transmission_attempts < MAX_TRANSMISSION_ATTEMPTS){
             setBinExpBackoff();
-            cout << "Node " << id << " collided during transmission. Retrying after backoff: " << backoff << endl;
+            std::cout << RED << "Node " << id << " collided during transmission. Attempt: " << transmission_attempts << "/" << MAX_TRANSMISSION_ATTEMPTS << ". Retrying after backoff: " << backoff << NORMAL << std::endl;
         }
         else{
             dropped_packets++;
-            cout << "Node " << id << " collided during transmission. Packet dropped" << endl;
+            std::cout << RED << "Node " << id << " collided during transmission. Attempt: " << MAX_TRANSMISSION_ATTEMPTS << "/" << MAX_TRANSMISSION_ATTEMPTS << ". Packet dropped" << NORMAL << std::endl;
             transmission_attempts = 0;
             setFrame();
             resetBackoff();
@@ -166,7 +148,7 @@ void Node::ack() {
         successful_transmissions++;
         setFrame();
         resetBackoff();
-        cout << "Node " << id << " successfully transmitted." << endl;
+        std::cout << GREEN << "Node " << id << " successfully transmitted." << NORMAL << std::endl;
     }
     setDifs();
     collided = false;
@@ -174,10 +156,10 @@ void Node::ack() {
 }
 
 
-void Channel::transmission() {
-    vector<Node*> unfinished_nodes;
+void transmission() {
+    std::vector<Node*> unfinished_nodes;
     for(Node* node : transmitting_nodes){
-        Channel::status = BUSY;
+        channel_status = BUSY;
         bool done = node->transmitting();
         if(transmitting_nodes.size() > 1){
             node->setCollided();
@@ -189,66 +171,75 @@ void Channel::transmission() {
             unfinished_nodes.push_back(node);
         }
     }
+    if(channel_status == IDLE){
+        wasted_time++;
+    }
     transmitting_nodes = unfinished_nodes;
     if(unfinished_nodes.size() == 0){
-        Channel::status = IDLE;
+        channel_status = IDLE;
     }
 }
 
-void update(vector<Node*>& nodes){
+void update(){
     for(Node* node : nodes){
         node->attemptTransmission();
     }
-    Channel::transmission();
+    transmission();
 }
 
-void displayStatistics(vector<Node*>& nodes){
-    cout << endl << right;
-    cout << UNDERLINE << "Simulation Results" << NORMAL << endl;
+void displayStatistics(){
+    std::cout << std::endl << std::right;
+    std::cout << UNDERLINE << "Simulation Results" << NORMAL << std::endl;
+    std::cout << "Sample Time: " << SAMPLE_TIME <<std::endl;
+    std::cout << "Frame Size: " << FRAME_SIZE << std::endl;
 
-    cout << HEADING << "Node ID                   | ";
+    std::cout << HEADING << " Node ID                   | ";
     for(Node* node : nodes){
-        cout << setw(8) << "Node " + to_string(node->getId()) << " | ";
+        std::cout << std::setw(8) << "Node " + std::to_string(node->getId()) << " | ";
     }
-    cout << NORMAL << endl;
-    cout << GREEN << "Successful Transmissions  | ";
+    std::cout << NORMAL << std::endl;
+    std::cout << GREEN << " Successful Transmissions  | ";
     for(Node* node : nodes){
-        cout << setw(8) << node->getSuccessfulTransmissions() << " | ";
+        std::cout << std::setw(8) << node->getSuccessfulTransmissions() << " | ";
     }
-    cout << NORMAL << endl;
-    cout << RED << "Collisions                | ";
+    std::cout << NORMAL << std::endl;
+    std::cout << RED << " Collisions                | ";
     for(Node* node : nodes){
-        cout << setw(8) << node->getCollisions() << " | ";
+        std::cout << std::setw(8) << node->getCollisions() << " | ";
     }
-    cout << NORMAL << endl;
-    cout << YELLOW << "Backoffs                  | ";
+    std::cout << NORMAL << std::endl;
+    std::cout << YELLOW << " Backoffs                  | ";
     for(Node* node : nodes){
-        cout << setw(8) << node->getBackoffs() << " | ";
+        std::cout << std::setw(8) << node->getBackoffs() << " | ";
     }
-    cout << NORMAL << endl;
-    cout << RED << "Dropped Packets           | ";
+    std::cout << NORMAL << std::endl;
+    std::cout << RED << " Dropped Packets           | ";
     for(Node* node : nodes){
-        cout << setw(8) << node->getDroppedPackets() << " | ";
+        std::cout << std::setw(8) << node->getDroppedPackets() << " | ";
     }
-    cout << NORMAL << endl;
-    cout << left << endl;
+    std::cout << NORMAL << std::endl;
+    std::cout << RED << "Total Wasted Slots: " << wasted_time << NORMAL << std::endl;
+    std::cout << std::left << std::endl;
 }
 
 int main() {
     srand(static_cast<unsigned>(time(nullptr)));
+    int n_nodes;
+    std::cout << HEADING << "  CSMA/CA Simulation  " << NORMAL << std::endl;
+    std::cout << "Enter the number of nodes: ";
+    std::cin >> n_nodes;
 
-    vector<Node*> nodes;
-    for (int i = 0; i < NUM_NODES; i++){
+    for (int i = 0; i < n_nodes; i++){
         Node* newNode = new Node(i + 1);
         nodes.push_back(newNode);
     }
 
     for(int i=0; i < SAMPLE_TIME; i++){
-        cout << ">> " << i + 1 << endl;
-        update(nodes);
+        std::cout << HEADING << " " << i + 1 << " " << NORMAL << std::endl;
+        update();
     }
 
-    displayStatistics(nodes);
+    displayStatistics();
 
     return 0;
 }
