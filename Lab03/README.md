@@ -18,6 +18,8 @@ Frame size is defined as the time units to transmit dataframe
 ### Q3
 Execute `q3_receiver.c` and `q3_sender.c` in order
 
+Try compiling with `-lrt` in case of errors
+
 Sender data is given in `sender.txt` and receiver data is printed in `receiver.txt`
 
 Timestamps displayed
